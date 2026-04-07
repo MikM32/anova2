@@ -20,6 +20,10 @@ function getTc(a, df) { return TT[df]?.[a / 2] || 2.262; }
 const ff = (v, d = 4) => Number(v).toFixed(d), f2 = v => Number(v).toFixed(2);
 const ALPHAS = [0.01, 0.05, 0.10];
 
+// ===== F-distribution PDF =====
+function lnGamma(z) { const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7]; if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lnGamma(1 - z); z -= 1; let x = c[0]; for (let i = 1; i < 9; i++) x += c[i] / (z + i); const t = z + 7.5; return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x); }
+function fPDF(x, d1, d2) { if (x <= 0) return 0; const lnB = lnGamma(d1 / 2) + lnGamma(d2 / 2) - lnGamma((d1 + d2) / 2); return Math.exp((d1 / 2) * Math.log(d1 / d2) + (d1 / 2 - 1) * Math.log(x) - ((d1 + d2) / 2) * Math.log(1 + d1 * x / d2) - lnB); }
+
 // ===== Default data =====
 const DEF1 = [[3.30, 3.42, 3.36, 3.34], [3.25, 3.15, 3.30, 3.20], [3.10, 3.25, 3.18, 3.12]];
 const DEF2 = [[9.8, 3.3, 2.8, 3.1, 4.1], [12.6, 4.4, 4.9, 3.5, 3.9], [11.9, 3.9, 5.3, 4.8, 4.7], [13.1, 5.9, 2.6, 3.1, 3.6], [13.3, 4.6, 5.1, 5.0, 4.1], [13.5, 5.2, 3.2, 3.3, 4.3], [10.1, 4.0, 4.0, 3.3, 4.0], [13.1, 4.7, 4.5, 3.5, 3.8], [10.7, 4.5, 4.1, 3.7, 3.6], [11.0, 3.7, 3.6, 3.3, 3.6], [13.0, 4.6, 4.6, 3.6, 3.6], [11.6, 4.7, 3.5, 3.5, 3.7], [12.0, 3.9, 4.6, 3.6, 4.1], [11.4, 4.6, 4.0, 3.4, 3.6], [12.2, 5.1, 3.6, 3.3, 4.0], [12.8, 5.0, 4.4, 3.6, 3.7], [12.4, 4.8, 4.4, 3.4, 3.6], [13.2, 5.3, 3.5, 3.6, 3.7], [10.6, 3.9, 3.8, 3.4, 4.0], [7.9, 3.4, 3.8, 3.4, 3.4]];
@@ -39,11 +43,18 @@ function calc1(data, sigma, alpha) {
   const LSD = tc * Math.sqrt(2 * MSE / n);
   const cmp = []; for (let i = 0; i < k; i++)for (let j = i + 1; j < k; j++) { const df = Math.abs(mn[i] - mn[j]); cmp.push({ a: nm[i], b: nm[j], i: i + 1, j: j + 1, diff: df, sig: df > LSD }); }
   const vr = data.map((g, i) => g.reduce((a, v) => a + (v - mn[i]) ** 2, 0) / (n - 1));
-  const res = []; data.forEach((g, i) => g.forEach(v => res.push(v - mn[i]))); res.sort((a, b) => a - b);
-  const all = data.flat(), med = [...all].sort((a, b) => a - b)[Math.floor(all.length / 2)];
-  const signs = all.map(v => v >= med ? "+" : "-");
-  let runs = 1; for (let i = 1; i < signs.length; i++)if (signs[i] !== signs[i - 1]) runs++;
-  return { data, nm, k, n, N, sigma, alpha, mn, gm, tau, SST, SSE, SSTot, MST, MSE, F0, Fc, tc, LSD, cmp, vr, res, runs, signs, rejected: F0 > Fc };
+  const res = []; data.forEach((g, i) => g.forEach(v => res.push(v - mn[i])));
+  const resSorted = [...res].sort((a, b) => a - b);
+  // Runs test on residuals in observation order
+  let runs = 1; for (let i = 1; i < res.length; i++) if ((res[i] >= 0) !== (res[i - 1] >= 0)) runs++;
+  const n1 = res.filter(e => e >= 0).length, n2 = res.filter(e => e < 0).length;
+  const ER = (2 * n1 * n2) / (n1 + n2) + 1;
+  const VR = (2 * n1 * n2 * (2 * n1 * n2 - n1 - n2)) / ((n1 + n2) ** 2 * ((n1 + n2) - 1));
+  const sdR = Math.sqrt(VR);
+  const Z0runs = sdR > 0 ? (runs - ER) / sdR : 0;
+  const Zcrit = alpha === 0.01 ? 2.576 : alpha === 0.05 ? 1.96 : 1.645;
+  const runsOk = Math.abs(Z0runs) <= Zcrit;
+  return { data, nm, k, n, N, sigma, alpha, mn, gm, tau, SST, SSE, SSTot, MST, MSE, F0, Fc, tc, LSD, cmp, vr, res, resSorted, runs, n1, n2, ER, VR, sdR, Z0runs, Zcrit, runsOk, rejected: F0 > Fc };
 }
 
 function calc2(raw, alpha, xp) {
@@ -71,6 +82,53 @@ function calc2(raw, alpha, xp) {
 function NI({ value, onChange, w = 58 }) {
   return <input type="number" step="any" value={value} onChange={e => onChange(parseFloat(e.target.value) || 0)}
     style={{ width: w, padding: "3px 4px", border: "1px solid #cbd5e1", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#fffbeb" }} />;
+}
+
+// ===== Fisher Chart =====
+function FisherChart({ d1, d2, F0, Fc, alpha }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+    const pad = { l: 40, r: 15, t: 15, b: 32 }, pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    const xMax = Math.max(F0 * 1.4, Fc * 2, 8), steps = 300, dx = xMax / steps;
+    let pts = [], yMax = 0;
+    for (let i = 0; i <= steps; i++) { const x = i * dx, y = fPDF(x, d1, d2); if (isFinite(y)) { pts.push([x, y]); if (y > yMax) yMax = y; } }
+    yMax *= 1.15;
+    const toX = x => pad.l + (x / xMax) * pw, toY = y => pad.t + ph - (y / yMax) * ph;
+    ctx.clearRect(0, 0, W, H);
+    // rejection region fill
+    ctx.beginPath(); ctx.moveTo(toX(Fc), toY(0));
+    for (const [x, y] of pts) if (x >= Fc) ctx.lineTo(toX(x), toY(y));
+    ctx.lineTo(toX(xMax), toY(0)); ctx.closePath();
+    ctx.fillStyle = "rgba(233,69,96,0.22)"; ctx.fill();
+    // curve
+    ctx.beginPath(); pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(toX(x), toY(y)) : ctx.lineTo(toX(x), toY(y)));
+    ctx.strokeStyle = "#0f3460"; ctx.lineWidth = 2.2; ctx.stroke();
+    // axes
+    ctx.strokeStyle = "#555"; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + ph); ctx.lineTo(pad.l + pw, pad.t + ph); ctx.stroke();
+    // Fc line
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = "#e94560"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(toX(Fc), toY(0)); ctx.lineTo(toX(Fc), toY(fPDF(Fc, d1, d2))); ctx.stroke();
+    // F0 line
+    ctx.strokeStyle = "#2e7d32";
+    ctx.beginPath(); ctx.moveTo(toX(Math.min(F0, xMax * 0.95)), toY(0)); ctx.lineTo(toX(Math.min(F0, xMax * 0.95)), pad.t + 8); ctx.stroke();
+    ctx.setLineDash([]);
+    // labels
+    ctx.font = "11px 'Segoe UI',sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = "#e94560"; ctx.fillText(`Fc=${Fc}`, toX(Fc), toY(0) + 14);
+    ctx.fillStyle = "#2e7d32"; ctx.fillText(`F\u2080=${Number(F0).toFixed(2)}`, toX(Math.min(F0, xMax * 0.95)), pad.t + 2);
+    ctx.fillStyle = "#e94560"; ctx.font = "10px 'Segoe UI',sans-serif";
+    ctx.fillText(`\u03B1=${alpha}`, Math.min(toX(Fc) + 35, W - 30), toY(fPDF(Fc, d1, d2) * 0.5));
+    // title
+    ctx.font = "bold 11px 'Segoe UI',sans-serif"; ctx.fillStyle = "#0f3460"; ctx.textAlign = "left";
+    ctx.fillText(`Distribución F(${d1}, ${d2})`, pad.l + 5, pad.t + 12);
+    ctx.fillStyle = "#333"; ctx.textAlign = "center"; ctx.font = "10px 'Segoe UI',sans-serif";
+    ctx.fillText("F", W / 2, H - 3);
+  }, [d1, d2, F0, Fc, alpha]);
+  return <canvas ref={canvasRef} width={500} height={200} style={{ width: "100%", maxWidth: 500, height: "auto", border: "1px solid #e0e0e0", borderRadius: 6, background: "#fafbfc", marginTop: 8 }} />;
 }
 
 // ===== MAIN =====
@@ -169,7 +227,7 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Modelo Estadístico</h3>
         <div style={S.fm}><TB m={`Y_{ij} = \\mu + \\tau_i + \\varepsilon_{ij}, \\qquad \\varepsilon_{ij} \\sim N(0,\\,\\sigma^2)`} /></div>
-        <Def show={D}><b><Tx m="Y_{ij}" />:</b> Latencia de la réplica j de la arquitectura i.<br /><b><Tx m="\mu" />:</b> Media global poblacional de latencia.<br /><b><Tx m="\tau_i" />:</b> Efecto de la arquitectura i. Si <Tx m="\tau_i < 0" /> reduce latencia.<br /><b><Tx m="\varepsilon_{ij}" />:</b> Error aleatorio, asumido normal con media 0.<br /><b>¿Por qué este modelo?</b> Un solo factor (arquitectura) con 3 niveles y réplicas = diseño completamente aleatorizado.</Def>
+        <Def show={D}><b><Tx m="Y_{ij}" />:</b> Observación j del tratamiento i.<br /><b><Tx m="\mu" />:</b> Media global: <Tx m="\mu = \tfrac{1}{k}\sum \mu_i" />.<br /><b><Tx m="\tau_i" />:</b> Efecto del tratamiento: <Tx m="\tau_i = \mu_i - \mu" />, con <Tx m="\sum \tau_i = 0" />.<br /><b><Tx m="\varepsilon_{ij}" />:</b> Error iid <Tx m="\sim N(0,\sigma^2)" />, independiente del tratamiento.<br /><b>Modelo:</b> DCA — 1 factor, k=3 niveles, n=4 réplicas/nivel.</Def>
         <p><Tx m={`i = 1,2,3 \\;\\text{(arquitecturas)},\\quad j = 1,2,3,4 \\;\\text{(réplicas)}`} /></p>
       </div>
       <div style={S.cd}>
@@ -198,26 +256,27 @@ export default function App() {
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>ANOVA — 8 Pasos</h3>
         <div style={S.sp}><div style={S.spT}>Paso 1: Parámetros</div>
           <p><Tx m={`k=3,\\;n=4,\\;N=12,\\;\\sigma=${ff(sig, 2)}`} /> seg. Parámetros: <Tx m="\mu_1,\\mu_2,\\mu_3" /> (latencias medias de cada arquitectura).</p>
-          <Def show={D}><b><Tx m="\mu_i" />:</b> Latencia media real de la arquitectura i. Es desconocida; por eso hacemos la prueba.</Def>
+          <Def show={D}><b><Tx m="\mu_i" />:</b> Media poblacional del nivel i: <Tx m="\mu_i = \mu + \tau_i" />. Parámetro desconocido a estimar.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 2: Hipótesis nula</div>
           <div style={S.fm}><TB m="H_0: \\mu_1 = \\mu_2 = \\mu_3" /></div><p>Las tres arquitecturas tienen igual latencia media.</p>
-          <Def show={D}><b><Tx m="H_0" />:</b> Punto de partida conservador. Solo se rechaza si la evidencia es suficiente.</Def>
+          <Def show={D}><b><Tx m="H_0" />:</b> Equivale a <Tx m="\tau_1=\tau_2=\cdots=\tau_k=0" />. Se rechaza solo si <Tx m={`F_0 > F_{\\alpha,k-1,N-k}`} />.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 3: Hipótesis alternativa</div>
           <div style={S.fm}><TB m="H_1: \\text{Al menos un }\\mu_i\\text{ difiere}" /></div>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 4: Nivel de significancia</div>
           <div style={S.fm}><TB m={`\\alpha = ${a1}`} /></div>
-          <Def show={D}><b><Tx m="\alpha" />:</b> Probabilidad máxima de Error Tipo I. Al {a1 * 100}% de error.</Def>
+          <Def show={D}><b><Tx m="\alpha" />:</b> <Tx m={"P(\\text{rechazar }H_0 \\mid H_0\\text{ verdadera}) \\leq \\alpha"} />. Error Tipo I: concluir diferencia inexistente.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 5: Estadístico</div>
           <div style={S.fm}><TB m={`F_0 = \\frac{MST}{MSE} \\sim F_{(k-1,\\,N-k)} = F_{(2,\\,9)}`} /></div>
-          <Def show={D}><b><Tx m="F_0" />:</b> Fisher — compara variabilidad ENTRE grupos vs DENTRO de grupos. Se usa Fisher porque comparamos más de 2 medias.</Def>
+          <Def show={D}><b><Tx m="F_0" />:</b> Cociente de varianzas: <Tx m="MST/MSE" />. Bajo <Tx m="H_0" />, <Tx m={"F_0 \\sim F_{(k-1,\\,N-k)}"} />. Valores grandes → diferencia entre tratamientos.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 6: Criterio de rechazo</div>
           <div style={S.fm}><TB m={`\\text{Rechazar }H_0\\text{ si }F_0 > F_{${a1},\\,2,\\,9} = ${p1.Fc}`} /></div>
-          <Def show={D}><b><Tx m={`F_{\\text{crit}}=${p1.Fc}`} />:</b> Valor de tablas. Si <Tx m="F_0" /> lo supera, la diferencia entre arquitecturas no se explica por azar.</Def>
+          <Def show={D}><b><Tx m={`F_{\\text{crit}}`} />:</b> Percentil <Tx m="1-\\alpha" /> de <Tx m="F_{(k-1,\\,N-k)}" />. Región de rechazo: cola derecha.</Def>
+          <div style={{ marginTop: 8 }}><FisherChart d1={2} d2={9} F0={p1.F0} Fc={p1.Fc} alpha={a1} /></div>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 7: Cálculos</div>
           <h4 style={{ margin: "6px 0 3px", color: "#333", fontSize: 13 }}>Tabla de fórmulas</h4>
@@ -227,7 +286,7 @@ export default function App() {
               <tr style={{ background: "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600 }}>Error</td><td style={S.td}><Tx m={"\\sum\\!\\sum(y_{ij}-\\bar{y}_i)^2"} /></td><td style={S.td}><Tx m="N{-}k" /></td><td style={S.td}><Tx m="\\tfrac{SSE}{N-k}" /></td><td style={S.td}>—</td></tr>
               <tr><td style={{ ...S.td, fontWeight: 600 }}>Total</td><td style={S.td}><Tx m="SST{+}SSE" /></td><td style={S.td}><Tx m="N{-}1" /></td><td style={S.td}>—</td><td style={S.td}>—</td></tr>
             </tbody></table>
-          <Def show={D}><b>SST:</b> Variabilidad ENTRE arquitecturas.<br /><b>SSE:</b> Ruido DENTRO de cada arquitectura.<br /><b>MS:</b> Cuadrados medios = SS/gl (normalización).</Def>
+          <Def show={D}><b>SST</b> = <Tx m={"n\\sum(\\bar{y}_i - \\bar{y}_{..})^2"} />: variabilidad entre tratamientos.<br /><b>SSE</b> = <Tx m={"\\sum\\sum(y_{ij} - \\bar{y}_i)^2"} />: variabilidad residual.<br /><b>MS</b> = SS/gl: normalización por grados de libertad.</Def>
           <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Valores numéricos</h4>
           <table style={S.T}><thead><tr><th style={S.th}>Fuente</th><th style={S.th}>SS</th><th style={S.th}>gl</th><th style={S.th}>MS</th><th style={S.th}><Tx m="F_0" /></th><th style={S.th}><Tx m="F_{\text{crit}}" /></th></tr></thead>
             <tbody>
@@ -251,10 +310,10 @@ export default function App() {
       <div style={S.q}>Pregunta 3: ¿Recomendaría SwiftPay (<Tx m="A_3" />) como estándar para el banco?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Comparaciones Múltiples — LSD de Fisher</h3>
-        <Def show={D}><b>LSD:</b> Tras rechazar <Tx m="H_0" /> en ANOVA, identifica ENTRE CUÁLES pares de arquitecturas existe diferencia significativa.</Def>
+        <Def show={D}><b>LSD:</b> Prueba post-hoc que compara todos los pares <Tx m="(i,j)" /> tras rechazar <Tx m="H_0" />. Significativa si <Tx m="|\\bar{y}_i - \\bar{y}_j| > LSD" />.</Def>
         <h4 style={{ margin: "6px 0 3px", color: "#333", fontSize: 13 }}>Fórmula y cálculo</h4>
         <div style={S.fm}><TB m={`LSD = t_{\\alpha/2,\\,N-k}\\cdot\\sqrt{\\frac{2\\cdot MSE}{n}} = ${p1.tc}\\times\\sqrt{\\frac{2\\times${ff(p1.MSE, 6)}}{4}} = ${ff(p1.LSD, 4)}`} /></div>
-        <Def show={D}><b><Tx m={`t_{${a1 / 2},9}=${p1.tc}`} />:</b> Valor crítico t bilateral.<br /><b>Regla:</b> Si <Tx m={"|\\bar{y}_i-\\bar{y}_j|>LSD"} /> → significativa.</Def>
+        <Def show={D}><b><Tx m={`t_{${a1 / 2},\\,N-k}`} />:</b> Percentil de Student con <Tx m="N-k" /> gl. <Tx m={"LSD = t_{\\alpha/2}\\sqrt{2 \\cdot MSE / n}"} />: mínima diferencia significativa entre pares.</Def>
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Resultados</h4>
         <table style={S.T}><thead><tr><th style={S.th}>Comparación</th><th style={S.th}><Tx m={"|\\bar{y}_i-\\bar{y}_j|"} /></th><th style={S.th}>LSD</th><th style={S.th}>Resultado</th></tr></thead>
           <tbody>{p1.cmp.map((x, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}>{x.a} vs {x.b}</td><td style={S.td}>{ff(x.diff, 4)}</td><td style={S.td}>{ff(p1.LSD, 4)}</td><td style={{ ...S.td, fontWeight: 700, color: x.sig ? "#2e7d32" : "#c62828" }}>{x.sig ? "Significativa" : "No significativa"}</td></tr>)}</tbody></table>
@@ -272,26 +331,64 @@ export default function App() {
       <div style={S.q}>Pregunta 4: ¿Apoyaría el supuesto de normalidad?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Supuesto de Normalidad</h3>
-        <Def show={D}><b>¿Por qué?</b> ANOVA asume <Tx m="\varepsilon_{ij}\sim N(0,\sigma^2)" />. Si no se cumple, los valores F y p podrían no ser confiables.</Def>
+        <Def show={D}><b>Supuesto:</b> <Tx m="\varepsilon_{ij} \sim N(0,\sigma^2)" />. Violación → <Tx m="F_0" /> y p-valor no confiables. Se verifica mediante residuos <Tx m={"e_{ij} = y_{ij} - \\bar{y}_i"} />.</Def>
         <div style={S.fm}><TB m={`e_{ij} = y_{ij} - \\bar{y}_i`} /></div>
-        <Def show={D}><b><Tx m="e_{ij}" />:</b> Residuo. Versión muestral del error. Deben comportarse como datos normales centrados en 0.</Def>
+        <Def show={D}><b><Tx m="e_{ij}" />:</b> Residuo = estimación de <Tx m="\varepsilon_{ij}" />. Si el modelo es correcto, <Tx m={"e_{ij} \\approx N(0,\\sigma^2)"} /> sin patrones.</Def>
         <p style={{ fontSize: 12 }}>Residuos ordenados:</p>
-        <div style={S.fm}><TB m={`\\{${p1.res.map(r => ff(r, 4)).join(',\\;')}\\}`} /></div>
+        <div style={S.fm}><TB m={`\\{${p1.resSorted.map(r => ff(r, 4)).join(',\\;')}\\}`} /></div>
         <p style={{ fontSize: 13 }}>• Simétricos alrededor de 0 • Sin outliers • Rango acotado</p>
         <div style={S.ok}><b>Respuesta:</b> Con <Tx m="n=4" /> por grupo, las pruebas formales tienen bajo poder. Los residuos no muestran asimetrías ni valores extremos, por lo que <b>el supuesto de normalidad se sostiene razonablemente</b> para las mediciones de latencia del core bancario.</div>
       </div>
     </div>),
 
-    // Aleatoriedad
+    // Aleatoriedad — Estadístico Z de rachas
     () => (<div>
       <div style={S.q}>Pregunta 5: ¿Los datos fueron obtenidos al azar?</div>
       <div style={S.cd}>
-        <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Supuesto de Aleatoriedad</h3>
-        <Def show={D}><b>¿Por qué?</b> ANOVA requiere independencia. Si las mediciones siguen un patrón (ej: mejoran por caché), las conclusiones se invalidan.</Def>
-        <div style={S.fm}><TB m={`\\text{Signos: }\\{${p1.signs.join(',\\;')}\\}`} /></div>
-        <div style={S.fm}><TB m={`R = ${p1.runs}\\text{ rachas}`} /></div>
-        <Def show={D}><b>Racha:</b> Secuencia consecutiva del mismo signo. Pocas = tendencia; muchas = alternancia artificial.</Def>
-        <div style={S.ok}><b>Respuesta:</b> Con <Tx m={`R=${p1.runs}`} /> rachas en 12 observaciones, no se detecta patrón sistemático. <b>El supuesto se sostiene</b> si el banco asignó aleatoriamente las arquitecturas a los servidores de prueba.</div>
+        <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Supuesto de Aleatoriedad — Estadístico Z</h3>
+        <Def show={D}>
+          <b>Racha:</b> Subsecuencia consecutiva de residuos del mismo signo (positivo o negativo) en el orden de observación.<br />
+          <b>Residuo:</b> <Tx m={"e_{ij} = y_{ij} - \\bar{y}_i"} /> — desviación de cada observación respecto a la media de su tratamiento.<br />
+          <b><Tx m="n_1" />:</b> Número de residuos <Tx m={"\\geq 0"} />. <b><Tx m="n_2" />:</b> Número de residuos <Tx m={"< 0"} />. <b><Tx m="N = n_1 + n_2" />.</b><br />
+          <b><Tx m="R" />:</b> Total de rachas observadas.<br />
+          <b><Tx m="E(R)" />:</b> Valor esperado: <Tx m={"E(R) = \\frac{2n_1 n_2}{N} + 1"} />.<br />
+          <b><Tx m={"\\sigma_R"} />:</b> Desviación estándar: <Tx m={"\\sigma_R = \\sqrt{\\frac{2n_1 n_2(2n_1 n_2 - N)}{N^2(N-1)}}"} />.<br />
+          <b><Tx m="Z_0" />:</b> Estadístico normalizado: <Tx m={"Z_0 = \\frac{R - E(R)}{\\sigma_R}"} />. Mide cuántas desviaciones estándar se aleja <Tx m="R" /> de su valor esperado.<br />
+          <b>Criterio:</b> Si <Tx m={`|Z_0| \\leq Z_{\\alpha/2}`} />, los residuos son consistentes con independencia.
+        </Def>
+
+        <div style={S.cd}>
+          <h4 style={{ margin: "0 0 6px", color: "#0f3460", fontSize: 13 }}>1. Residuos en orden de observación</h4>
+          <table style={S.T}><thead><tr><th style={S.th}>Obs.</th><th style={S.th}><Tx m="y_{ij}" /></th><th style={S.th}><Tx m={"\\bar{y}_i"} /></th><th style={S.th}><Tx m="e_{ij}" /></th></tr></thead>
+            <tbody>{(() => { let idx = 0; return p1.data.flatMap((g, i) => g.map((v, j) => { const e = v - p1.mn[i]; idx++; return <tr key={`${i}-${j}`} style={{ background: idx % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontSize: 10 }}>{p1.nm[i]}-{j + 1}</td><td style={S.td}>{ff(v, 2)}</td><td style={S.td}>{ff(p1.mn[i], 4)}</td><td style={{ ...S.td, fontWeight: 600, color: e >= 0 ? "#2e7d32" : "#c62828" }}>{ff(e, 4)}</td></tr>; })); })()}</tbody></table>
+        </div>
+
+        <div style={S.cd}>
+          <h4 style={{ margin: "0 0 6px", color: "#0f3460", fontSize: 13 }}>2. Parámetros de la prueba</h4>
+          <table style={S.T}><thead><tr><th style={S.th}>Parámetro</th><th style={S.th}>Fórmula</th><th style={S.th}>Valor</th></tr></thead>
+            <tbody>
+              <tr><td style={{ ...S.td, fontWeight: 600 }}><Tx m="n_1" /> (residuos <Tx m={"\\geq 0"} />)</td><td style={S.td}>—</td><td style={{ ...S.td, fontWeight: 700 }}>{p1.n1}</td></tr>
+              <tr style={{ background: "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m="n_2" /> (residuos <Tx m={"< 0"} />)</td><td style={S.td}>—</td><td style={{ ...S.td, fontWeight: 700 }}>{p1.n2}</td></tr>
+              <tr><td style={{ ...S.td, fontWeight: 600 }}><Tx m="N" /></td><td style={S.td}><Tx m="n_1 + n_2" /></td><td style={{ ...S.td, fontWeight: 700 }}>{p1.N}</td></tr>
+              <tr style={{ background: "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600, color: "#0f3460" }}><Tx m="R" /> (rachas)</td><td style={S.td}>—</td><td style={{ ...S.td, fontWeight: 700, color: "#0f3460" }}>{p1.runs}</td></tr>
+            </tbody></table>
+        </div>
+
+        <div style={S.cd}>
+          <h4 style={{ margin: "0 0 6px", color: "#0f3460", fontSize: 13 }}>3. Cálculo del estadístico Z</h4>
+          <div style={S.fm}><TB m={`E(R) = \\frac{2(${p1.n1})(${p1.n2})}{${p1.N}} + 1 = ${ff(p1.ER, 4)}`} /></div>
+          <div style={S.fm}><TB m={`\\sigma_R = \\sqrt{\\frac{2(${p1.n1})(${p1.n2})\\big[2(${p1.n1})(${p1.n2}) - ${p1.N}\\big]}{${p1.N}^2(${p1.N}-1)}} = ${ff(p1.sdR, 4)}`} /></div>
+          <div style={{ ...S.fm, borderLeft: "3px solid #e94560" }}><TB m={`Z_0 = \\frac{R - E(R)}{\\sigma_R} = \\frac{${p1.runs} - ${ff(p1.ER, 4)}}{${ff(p1.sdR, 4)}} = ${ff(p1.Z0runs, 4)}`} /></div>
+        </div>
+
+        <div style={S.cd}>
+          <h4 style={{ margin: "0 0 6px", color: "#0f3460", fontSize: 13 }}>4. Criterio de rechazo</h4>
+          <div style={S.fm}><TB m={`\\text{Independencia si } |Z_0| \\leq Z_{\\alpha/2}`} /></div>
+          <div style={S.fm}><TB m={`Z_{\\alpha/2} = Z_{${ff(a1 / 2, 3)}} = ${p1.Zcrit}`} /></div>
+          <div style={{ ...S.fm, borderLeft: `3px solid ${p1.runsOk ? "#2e7d32" : "#c62828"}` }}><TB m={`|Z_0| = ${ff(Math.abs(p1.Z0runs), 4)} \\;${p1.runsOk ? "\\leq" : ">"}\\; ${p1.Zcrit} \\;\\Longrightarrow\\; \\boxed{${p1.runsOk ? "\\text{Independencia}" : "\\text{No independencia}"}}`} /></div>
+        </div>
+
+        <div style={p1.runsOk ? S.ok : S.wn}><b>Respuesta:</b> Con <Tx m={`R=${p1.runs}`} /> rachas en <Tx m={`N=${p1.N}`} /> observaciones (<Tx m={`n_1=${p1.n1}, n_2=${p1.n2}`} />), se obtiene <Tx m={`Z_0=${ff(p1.Z0runs, 4)}`} />. Dado que <Tx m={`|Z_0|=${ff(Math.abs(p1.Z0runs), 4)}`} /> {p1.runsOk ? "≤" : ">"} <Tx m={`${p1.Zcrit}`} /> (<Tx m={`\\alpha=${a1}`} />), {p1.runsOk ? <><b>los residuos son independientes</b> y el supuesto de aleatoriedad se sostiene.</> : <><b>hay evidencia de dependencia</b> en los residuos; el supuesto de aleatoriedad es cuestionable.</>}</div>
       </div>
     </div>),
 
@@ -300,14 +397,14 @@ export default function App() {
       <div style={S.q}>Pregunta 6: ¿Las tres arquitecturas presentan la misma varianza?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Homocedasticidad</h3>
-        <Def show={D}><b>Homocedasticidad:</b> <Tx m="\sigma_1^2=\sigma_2^2=\sigma_3^2" />. Si un grupo es mucho más disperso, <Tx m="F" /> se distorsiona.</Def>
+        <Def show={D}><b>Homocedasticidad:</b> <Tx m="\sigma_1^2 = \sigma_2^2 = \cdots = \sigma_k^2" />. Violación inflata o deflata <Tx m="F_0" />, invalidando el nivel <Tx m="\alpha" />.</Def>
         <div style={S.fm}><TB m={`s_i^2 = \\frac{1}{n-1}\\sum_{j=1}^{n}(y_{ij}-\\bar{y}_i)^2`} /></div>
         <table style={S.T}><thead><tr><th style={S.th}>Arquitectura</th><th style={S.th}><Tx m="s_i^2" /></th><th style={S.th}><Tx m="s_i" /></th></tr></thead>
           <tbody>{p1.nm.map((nm, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}>{nm}</td><td style={S.td}>{ff(p1.vr[i], 6)}</td><td style={S.td}>{ff(Math.sqrt(p1.vr[i]), 4)}</td></tr>)}</tbody></table>
         {(() => {
           const rat = Math.max(...p1.vr) / Math.min(...p1.vr); return <>
             <div style={S.fm}><TB m={`\\frac{s^2_{\\max}}{s^2_{\\min}} = ${ff(rat, 2)}`} /></div>
-            <Def show={D}><b>Regla práctica:</b> Razón {"<"} 3-4 → violación moderada, ANOVA robusto con <Tx m="n" /> iguales.</Def>
+            <Def show={D}><b>Regla:</b> Si <Tx m={"s^2_{\\max}/s^2_{\\min} < 3"} /> con <Tx m="n_i" /> iguales, ANOVA es robusto ante heterocedasticidad moderada.</Def>
             <div style={S.ok}><b>Respuesta:</b> La razón de varianzas es {ff(rat, 2)}. {rat < 3 ? "Esto indica una violación leve; " : "Esto sugiere que las varianzas no son exactamente iguales; sin embargo, "}con tamaños iguales (<Tx m="n=4" />), <b>ANOVA es robusto</b> ante esta violación y las conclusiones se mantienen.</div>
           </>;
         })()}
@@ -319,7 +416,7 @@ export default function App() {
       <div style={S.q}>Pregunta 7: Si no se cumplen los supuestos, ¿se mantienen las conclusiones del inciso 2?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Robustez de las Conclusiones</h3>
-        <Def show={D}><b>Robustez:</b> Un procedimiento es "robusto" cuando sus resultados se mantienen válidos aun con violaciones moderadas de supuestos.</Def>
+        <Def show={D}><b>Robustez:</b> Con <Tx m="n_i" /> iguales, ANOVA tolera violaciones moderadas de normalidad y homocedasticidad sin alterar significativamente el nivel <Tx m="\alpha" />.</Def>
         <table style={S.T}><thead><tr><th style={S.th}>Supuesto</th><th style={S.th}>Estado</th><th style={S.th}>Impacto</th></tr></thead>
           <tbody>
             <tr><td style={{ ...S.td, fontWeight: 600 }}>Normalidad</td><td style={{ ...S.td, color: "#2e7d32", fontWeight: 600 }}>Razonable</td><td style={{ ...S.td, textAlign: "left" }}>Sin evidencia en contra</td></tr>
@@ -329,7 +426,7 @@ export default function App() {
         <p style={{ fontSize: 13, marginTop: 8 }}>1. <b>Diseño balanceado</b> (<Tx m="n_1=n_2=n_3=4" />) → ANOVA robusto.</p>
         <p style={{ fontSize: 13 }}>2. <b><Tx m="F_0" /> holgado:</b> <Tx m={`${f2(p1.F0)}/${p1.Fc} \\approx ${ff(p1.F0 / p1.Fc, 1)}`} /> veces el valor crítico.</p>
         <p style={{ fontSize: 13 }}>3. <b>Normalidad</b> no rechazada por inspección de residuos.</p>
-        <Def show={D}>Cuando <Tx m="F_0" /> supera ampliamente a <Tx m="F_{\text{crit}}" />, incluso violaciones moderadas difícilmente cambiarían la decisión.</Def>
+        <Def show={D}><b>Señal fuerte:</b> <Tx m={"F_0/F_c \\gg 1"} /> indica que violaciones moderadas de supuestos no alteran la decisión estadística.</Def>
         <div style={S.ok}><b>Respuesta:</b> Aun si los supuestos no se cumplen estrictamente, <b>las conclusiones se mantienen</b>. El diseño balanceado y <Tx m={`F_0=${f2(p1.F0)}`} /> (ampliamente superior a {p1.Fc}) otorgan robustez. Se recomienda más réplicas para confirmar con mayor rigor.</div>
       </div>
     </div>),
@@ -342,7 +439,7 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Mínimos Cuadrados Ordinarios</h3>
         <div style={S.fm}><TB m={"\\hat{\\boldsymbol{\\beta}} = (\\mathbf{X}^\\top\\mathbf{X})^{-1}\\mathbf{X}^\\top\\mathbf{Y}"} /></div>
-        <Def show={D}><b>MCO:</b> Minimiza <Tx m="\sum(y_i-\hat{y}_i)^2" />.<br /><b><Tx m="\mathbf{X}" />:</b> Matriz 20×5 (columna de 1s + 4 predictores).<br /><b>SE:</b> <Tx m={"\\sqrt{MSE\\cdot c_{ii}}"} /> con <Tx m="c_{ii}" /> = diagonal de <Tx m="(X^\\top X)^{-1}" />.</Def>
+        <Def show={D}><b>MCO:</b> Minimiza <Tx m={"\\sum e_i^2 = \\sum(y_i - \\hat{y}_i)^2"} />. Solución: <Tx m={"\\hat{\\beta}=(X'X)^{-1}X'Y"} />.<br /><b>SE:</b> <Tx m={"SE(\\hat{\\beta}_i) = \\sqrt{MSE \\cdot c_{ii}}"} />, donde <Tx m={"c_{ii} = [(X'X)^{-1}]_{ii}"} />.</Def>
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Tabla de símbolos</h4>
         <table style={S.T}><thead><tr><th style={S.thF}>Param.</th><th style={S.thF}>Variable</th><th style={S.thF}>Significado</th></tr></thead>
           <tbody>{bN.map((nm, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={nm} /></td><td style={S.td}>{i === 0 ? "—" : <Tx m={`x_${i}`} />}</td><td style={{ ...S.td, textAlign: "left" }}>{bD[i]}</td></tr>)}</tbody></table>
@@ -368,14 +465,14 @@ export default function App() {
       <div style={S.q}>Pregunta 3: ANOVA para bondad de ajuste del modelo.</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>ANOVA para RLM — 8 Pasos</h3>
-        <Def show={D}>Evalúa si el modelo COMPLETO es significativo (al menos una variable aporta).</Def>
+        <Def show={D}><b>Prueba global:</b> <Tx m={"H_0: \\beta_1 = \\cdots = \\beta_p = 0"} />. Si <Tx m={"F_0 > F_c"} />, al menos una variable explica <Tx m="Y" />.</Def>
         <div style={S.sp}><div style={S.spT}>Pasos 1-4</div>
           <p><Tx m={`n=20,\\;p=4,\\;gl_{reg}=4,\\;gl_{error}=15`} />. <Tx m={`\\alpha=${a2}`} /></p>
           <div style={S.fm}><TB m={"H_0:\\beta_1=\\beta_2=\\beta_3=\\beta_4=0\\qquad H_1:\\text{Al menos un }\\beta_i\\neq 0"} /></div>
         </div>
         <div style={S.sp}><div style={S.spT}>Pasos 5-6</div>
           <div style={S.fm}><TB m={`F_0=\\frac{MSR}{MSE}\\sim F_{(4,15)},\\qquad\\text{Rechazar si }F_0>${p2.Fc}`} /></div>
-          <Def show={D}><b>MSR:</b> Variabilidad explicada por el modelo.<br /><b>MSE:</b> Variabilidad residual. Si el modelo es útil, <Tx m="MSR\\gg MSE" />.</Def>
+          <Def show={D}><b>MSR</b> = SSR/p: varianza explicada por regresión.<br /><b>MSE</b> = SSE/(n−p−1): varianza residual. <Tx m={"F_0 = MSR/MSE"} />.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 7</div>
           <h4 style={{ margin: "4px 0 3px", color: "#333", fontSize: 13 }}>Fórmulas</h4>
@@ -406,7 +503,7 @@ export default function App() {
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Coeficiente de Determinación</h3>
         <h4 style={{ margin: "4px 0 3px", color: "#333", fontSize: 13 }}>Fórmulas</h4>
         <div style={S.fm}><TB m={"R^2=\\frac{SSR}{SST}=1-\\frac{SSE}{SST}"} /><TB m={"R^2_{\\text{adj}}=1-\\frac{(1-R^2)(n-1)}{n-p-1}"} /></div>
-        <Def show={D}><b><Tx m="R^2" />:</b> Proporción de variabilidad explicada (0 a 1).<br /><b><Tx m={"R^2_{\\text{adj}}"} />:</b> Penaliza por variables que no aportan. Más honesto para comparar modelos.</Def>
+        <Def show={D}><b><Tx m="R^2" />:</b> <Tx m={"SSR/SST \\in [0,1]"} /> — fracción de variabilidad explicada por el modelo.<br /><b><Tx m={"R^2_{\\text{adj}}"} />:</b> Penaliza por número de parámetros p; favorece parsimonia al comparar modelos.</Def>
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Cálculo</h4>
         <div style={S.fm}><TB m={`R^2=\\frac{${ff(p2.SSR, 4)}}{${ff(p2.SST, 4)}}=${ff(p2.R2, 4)}`} /><TB m={`R^2_{\\text{adj}}=${ff(p2.R2a, 4)}`} /></div>
         <div style={S.ok}><b>Respuesta:</b> El modelo explica el <b>{ff(p2.R2 * 100, 2)}%</b> de la variabilidad del uso de CPU. <Tx m={`R^2_{\\text{adj}}=${ff(p2.R2a * 100, 2)}\\%`} />. El {ff((1 - p2.R2) * 100, 2)}% restante corresponde a factores no incluidos o variabilidad aleatoria.</div>
@@ -418,7 +515,7 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Intervalos de Confianza</h3>
         <div style={S.fm}><TB m={`IC_{${(1 - a2) * 100}\\%}:\\;\\hat{\\beta}_i\\pm t_{${a2 / 2},\\,15}\\cdot SE(\\hat{\\beta}_i),\\quad t_{${a2 / 2},15}=${p2.tc}`} /></div>
-        <Def show={D}><b>IC:</b> Rango plausible para el verdadero <Tx m="\beta_i" />. Si contiene 0, la variable podría no aportar.</Def>
+        <Def show={D}><b>IC:</b> <Tx m={"\\hat{\\beta}_i \\pm t_{\\alpha/2,\\,n-p-1} \\cdot SE(\\hat{\\beta}_i)"} />. Si <Tx m={"0 \\in IC"} /> → <Tx m="\beta_i" /> no es significativamente distinto de 0.</Def>
         <table style={S.T}><thead><tr><th style={S.th}></th><th style={S.th}><Tx m={"\\hat{\\beta}_i"} /></th><th style={S.th}>SE</th><th style={S.th}>Inferior</th><th style={S.th}>Superior</th><th style={S.th}><Tx m={"0\\in IC"} /></th></tr></thead>
           <tbody>{bN.map((nm, i) => { const c0 = p2.cl[i] <= 0 && p2.ch[i] >= 0; return <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={nm} /></td><td style={S.td}>{ff(p2.b[i], 4)}</td><td style={S.td}>{ff(p2.se[i], 4)}</td><td style={S.td}>{ff(p2.cl[i], 4)}</td><td style={S.td}>{ff(p2.ch[i], 4)}</td><td style={{ ...S.td, fontWeight: 700, color: c0 ? "#c62828" : "#2e7d32" }}>{c0 ? "Sí" : "No"}</td></tr>; })}</tbody></table>
         <div style={S.ok}><b>Respuesta:</b> Los parámetros cuyo IC no contiene 0 son significativos al {(1 - a2) * 100}% de confianza para el modelo de CPU de SwiftPay.</div>
@@ -429,10 +526,10 @@ export default function App() {
       <div style={S.q}>Pregunta 6: ¿El aporte de cada <Tx m="X_i" /> es significativo (5%)?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Significancia Individual — 8 Pasos</h3>
-        <Def show={D}>Evaluamos CADA variable por separado para saber cuáles realmente aportan al modelo de CPU.</Def>
+        <Def show={D}><b>Significancia individual:</b> Prueba <Tx m={"H_0: \\beta_i = 0"} /> para cada variable por separado. Rechazar si <Tx m={"|t_0| > t_c"} />.</Def>
         <div style={S.sp}><div style={S.spT}>Pasos 1-6</div>
           <div style={S.fm}><TB m={`H_0:\\beta_i=0\\quad H_1:\\beta_i\\neq 0\\quad\\alpha=${a2}`} /><TB m={`t_0=\\frac{\\hat{\\beta}_i}{SE(\\hat{\\beta}_i)},\\quad\\text{Rechazar si }|t_0|>t_{${a2 / 2},15}=${p2.tc}`} /></div>
-          <Def show={D}><b><Tx m="t_0" />:</b> Cuántos SE está <Tx m={"\\hat{\\beta}_i"} /> alejado de 0. Si es grande, <Tx m="\beta_i\\neq 0" />.</Def>
+          <Def show={D}><b><Tx m="t_0" />:</b> <Tx m={"t_0 = \\hat{\\beta}_i / SE(\\hat{\\beta}_i)"} /> — distancia estandarizada de <Tx m={"\\hat{\\beta}_i"} /> a 0. Rechazar si <Tx m={`|t_0| > ${p2.tc}`} />.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 7: Cálculos</div>
           <table style={S.T}><thead><tr><th style={S.th}>Variable</th><th style={S.th}><Tx m={"\\hat{\\beta}_i"} /></th><th style={S.th}>SE</th><th style={S.th}><Tx m="t_0" /></th><th style={S.th}><Tx m={`|t_0|\\text{ vs }${p2.tc}`} /></th><th style={S.th}>Decisión</th></tr></thead>
@@ -440,7 +537,7 @@ export default function App() {
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 8: Conclusión</div>
           <div style={S.ok}><b>Respuesta:</b> Con <Tx m={`\\alpha=${a2}`} />, las variables significativas son: <b>{p2.sigVars.length > 0 ? p2.sigVars.map(i => bD[i]).join(", ") : "ninguna"}</b>. Las no significativas ({p2.nsVars.map(i => bD[i]).join(", ")}) podrían eliminarse del modelo de telemetría de SwiftPay.</div>
-          <Def show={D}><b>Parsimonia:</b> El mejor modelo es el más simple que explique bien los datos.</Def>
+          <Def show={D}><b>Parsimonia:</b> Modelo con menor número de variables que maximice <Tx m={"R^2_{\\text{adj}}"} />.</Def>
         </div>
       </div>
     </div>),
@@ -453,7 +550,7 @@ export default function App() {
           <tbody>{[1, 2, 3, 4].map(i => { const sg = Math.abs(p2.tv[i]) > p2.tc; return <tr key={i} style={{ background: i % 2 ? "" : "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={`x_${i}`} /> ({bD[i]})</td><td style={S.td}>{ff(Math.abs(p2.tv[i]), 4)}</td><td style={S.td}>{sg ? ">" : "≤"} {p2.tc}</td><td style={{ ...S.td, fontWeight: 700, color: sg ? "#2e7d32" : "#c62828" }}>{sg ? "Incluir" : "Eliminar"}</td></tr>; })}</tbody></table>
         <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Modelo reducido propuesto</h4>
         <div style={S.fm}><TB m={`\\hat{y}=\\beta_0${p2.sigVars.map(i => `+\\beta_${i}x_${i}`).join("")}`} /></div>
-        <Def show={D}><b>¿Por qué reducir?</b> Variables no significativas no aportan y pueden causar sobreajuste.<br /><b>Confirmar con F parcial:</b> <Tx m={"F=\\frac{(SSE_R-SSE_C)/q}{MSE_C}"} /> donde q = variables eliminadas.</Def>
+        <Def show={D}><b>Reducción:</b> Eliminar variables con <Tx m={"|t_0| \\leq t_c"} /> reduce sobreajuste. Verificar con F parcial: <Tx m={"F = \\frac{(SSE_R - SSE_C)/q}{MSE_C}"} />, q = variables eliminadas.</Def>
         <div style={S.ok}><b>Respuesta:</b> Se recomienda un <b>modelo reducido</b> con {p2.sigVars.length > 0 ? <>variables <b>{p2.sigVars.map(i => bD[i]).join(", ")}</b></> : "revisión adicional"}. Las variables {p2.nsVars.map(i => bD[i]).join(", ")} se eliminan. Modelo completo: <Tx m={`R^2=${ff(p2.R2 * 100, 2)}\\%`} />, <Tx m={`R^2_{\\text{adj}}=${ff(p2.R2a * 100, 2)}\\%`} />. El modelo reducido debería mantener un <Tx m={"R^2_{\\text{adj}}"} /> similar, confirmando la simplificación.</div>
       </div>
     </div>),
