@@ -227,7 +227,7 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Modelo Estadístico</h3>
         <div style={S.fm}><TB m={`Y_{ij} = \\mu + \\tau_i + \\varepsilon_{ij}, \\qquad \\varepsilon_{ij} \\sim N(0,\\,\\sigma^2)`} /></div>
-        <Def show={D}><b><Tx m="Y_{ij}" />:</b> Observación j del tratamiento i.<br /><b><Tx m="\mu" />:</b> Media global: <Tx m="\mu = \tfrac{1}{k}\sum \mu_i" />.<br /><b><Tx m="\tau_i" />:</b> Efecto del tratamiento: <Tx m="\tau_i = \mu_i - \mu" />, con <Tx m="\sum \tau_i = 0" />.<br /><b><Tx m="\varepsilon_{ij}" />:</b> Error iid <Tx m="\sim N(0,\sigma^2)" />, independiente del tratamiento.<br /><b>Modelo:</b> DCA — 1 factor, k=3 niveles, n=4 réplicas/nivel.</Def>
+        <Def show={D}><b><Tx m="Y_{ij}" />:</b> Observación j del tratamiento i. Es la variable de respuesta medida experimentalmente (latencia en segundos).<br /><b><Tx m="\mu" />:</b> Media global poblacional: <Tx m="\mu = \tfrac{1}{k}\sum \mu_i" />. Representa el nivel base de latencia sin efecto de tratamiento.<br /><b><Tx m="\tau_i" />:</b> Efecto del tratamiento i: <Tx m="\tau_i = \mu_i - \mu" />, con restricción <Tx m="\sum \tau_i = 0" />. Cuantifica cuánto se desvía la media del nivel i respecto a la media global. Valores negativos indican reducción de latencia.<br /><b><Tx m="\varepsilon_{ij}" />:</b> Error aleatorio iid <Tx m="\sim N(0,\sigma^2)" />, independiente del tratamiento. Captura variabilidad no explicada por el modelo (ruido experimental, condiciones no controladas).<br /><b>Modelo DCA:</b> Diseño Completamente Aleatorizado — 1 factor fijo (arquitectura) con k=3 niveles y n=4 réplicas/nivel. Las unidades experimentales se asignan aleatoriamente a los tratamientos.</Def>
         <p><Tx m={`i = 1,2,3 \\;\\text{(arquitecturas)},\\quad j = 1,2,3,4 \\;\\text{(réplicas)}`} /></p>
       </div>
       <div style={S.cd}>
@@ -256,26 +256,26 @@ export default function App() {
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>ANOVA — 8 Pasos</h3>
         <div style={S.sp}><div style={S.spT}>Paso 1: Parámetros</div>
           <p><Tx m={`k=3,\\;n=4,\\;N=12,\\;\\sigma=${ff(sig, 2)}`} /> seg. Parámetros: <Tx m="\mu_1,\\mu_2,\\mu_3" /> (latencias medias de cada arquitectura).</p>
-          <Def show={D}><b><Tx m="\mu_i" />:</b> Media poblacional del nivel i: <Tx m="\mu_i = \mu + \tau_i" />. Parámetro desconocido a estimar.</Def>
+          <Def show={D}><b><Tx m="\mu_i" />:</b> Media poblacional del nivel i: <Tx m="\mu_i = \mu + \tau_i" />. Es la latencia promedio verdadera de la arquitectura i si se midiera infinitas veces. Al ser desconocida, se estima con <Tx m="\bar{y}_i" /> (media muestral). Los parámetros <Tx m="\mu_1, \mu_2, \mu_3" /> son el objeto central de la prueba ANOVA.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 2: Hipótesis nula</div>
           <div style={S.fm}><TB m="H_0: \\mu_1 = \\mu_2 = \\mu_3" /></div><p>Las tres arquitecturas tienen igual latencia media.</p>
-          <Def show={D}><b><Tx m="H_0" />:</b> Equivale a <Tx m="\tau_1=\tau_2=\cdots=\tau_k=0" />. Se rechaza solo si <Tx m={`F_0 > F_{\\alpha,k-1,N-k}`} />.</Def>
+          <Def show={D}><b><Tx m="H_0" />:</b> Hipótesis nula — afirma que todos los tratamientos producen la misma respuesta promedio. Equivale a <Tx m="\tau_1=\tau_2=\cdots=\tau_k=0" /> (ningún efecto de tratamiento). Se asume verdadera hasta que la evidencia muestral la contradiga. Solo se rechaza si el estadístico <Tx m={`F_0 > F_{\\alpha,k-1,N-k}`} />, es decir, si la variabilidad entre grupos es significativamente mayor que la variabilidad dentro de los grupos.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 3: Hipótesis alternativa</div>
           <div style={S.fm}><TB m="H_1: \\text{Al menos un }\\mu_i\\text{ difiere}" /></div>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 4: Nivel de significancia</div>
           <div style={S.fm}><TB m={`\\alpha = ${a1}`} /></div>
-          <Def show={D}><b><Tx m="\alpha" />:</b> <Tx m={"P(\\text{rechazar }H_0 \\mid H_0\\text{ verdadera}) \\leq \\alpha"} />. Error Tipo I: concluir diferencia inexistente.</Def>
+          <Def show={D}><b><Tx m="\alpha" /> (nivel de significancia):</b> Probabilidad máxima de cometer Error Tipo I: <Tx m={"P(\\text{rechazar }H_0 \\mid H_0\\text{ verdadera}) \\leq \\alpha"} />. Con <Tx m={`\\alpha=${a1}`} />, aceptamos un {a1 * 100}% de riesgo de concluir que existe diferencia entre arquitecturas cuando en realidad no la hay. Valores menores de <Tx m="\alpha" /> son más conservadores pero requieren evidencia más fuerte para rechazar.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 5: Estadístico</div>
           <div style={S.fm}><TB m={`F_0 = \\frac{MST}{MSE} \\sim F_{(k-1,\\,N-k)} = F_{(2,\\,9)}`} /></div>
-          <Def show={D}><b><Tx m="F_0" />:</b> Cociente de varianzas: <Tx m="MST/MSE" />. Bajo <Tx m="H_0" />, <Tx m={"F_0 \\sim F_{(k-1,\\,N-k)}"} />. Valores grandes → diferencia entre tratamientos.</Def>
+          <Def show={D}><b><Tx m="F_0" /> (estadístico de prueba):</b> Cociente <Tx m="MST/MSE" /> que compara la variabilidad entre tratamientos con la variabilidad dentro de los tratamientos. Bajo <Tx m="H_0" />, ambas estiman <Tx m="\sigma^2" /> y <Tx m={"F_0 \\sim F_{(k-1,\\,N-k)}"} /> con valores cercanos a 1. Bajo <Tx m="H_1" />, MST sobreestima <Tx m="\sigma^2" /> por el efecto de los tratamientos, produciendo valores de <Tx m="F_0" /> grandes. Se usa Fisher porque comparamos más de 2 medias simultáneamente.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 6: Criterio de rechazo</div>
           <div style={S.fm}><TB m={`\\text{Rechazar }H_0\\text{ si }F_0 > F_{${a1},\\,2,\\,9} = ${p1.Fc}`} /></div>
-          <Def show={D}><b><Tx m={`F_{\\text{crit}}`} />:</b> Percentil <Tx m="1-\\alpha" /> de <Tx m="F_{(k-1,\\,N-k)}" />. Región de rechazo: cola derecha.</Def>
+          <Def show={D}><b><Tx m={`F_{\\text{crit}}`} /> (valor crítico):</b> Percentil <Tx m="1-\\alpha" /> de la distribución <Tx m="F_{(k-1,\\,N-k)}" />. Define el umbral: si <Tx m="F_0" /> lo supera, la probabilidad de observar tal variabilidad entre grupos bajo <Tx m="H_0" /> es menor que <Tx m="\alpha" />, y rechazamos. La región de rechazo es unilateral derecha porque solo valores grandes de <Tx m="F_0" /> evidencian diferencias entre tratamientos.</Def>
           <div style={{ marginTop: 8 }}><FisherChart d1={2} d2={9} F0={p1.F0} Fc={p1.Fc} alpha={a1} /></div>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 7: Cálculos</div>
@@ -286,7 +286,7 @@ export default function App() {
               <tr style={{ background: "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600 }}>Error</td><td style={S.td}><Tx m={"\\sum\\!\\sum(y_{ij}-\\bar{y}_i)^2"} /></td><td style={S.td}><Tx m="N{-}k" /></td><td style={S.td}><Tx m="\\tfrac{SSE}{N-k}" /></td><td style={S.td}>—</td></tr>
               <tr><td style={{ ...S.td, fontWeight: 600 }}>Total</td><td style={S.td}><Tx m="SST{+}SSE" /></td><td style={S.td}><Tx m="N{-}1" /></td><td style={S.td}>—</td><td style={S.td}>—</td></tr>
             </tbody></table>
-          <Def show={D}><b>SST</b> = <Tx m={"n\\sum(\\bar{y}_i - \\bar{y}_{..})^2"} />: variabilidad entre tratamientos.<br /><b>SSE</b> = <Tx m={"\\sum\\sum(y_{ij} - \\bar{y}_i)^2"} />: variabilidad residual.<br /><b>MS</b> = SS/gl: normalización por grados de libertad.</Def>
+          <Def show={D}><b>SST</b> (Suma de Cuadrados de Tratamientos) = <Tx m={"n\\sum(\\bar{y}_i - \\bar{y}_{..})^2"} />: mide la variabilidad entre las medias de los tratamientos. Si los tratamientos no tienen efecto, SST será pequeña.<br /><b>SSE</b> (Suma de Cuadrados del Error) = <Tx m={"\\sum\\sum(y_{ij} - \\bar{y}_i)^2"} />: mide la variabilidad dentro de cada tratamiento (ruido experimental). Es la referencia contra la cual se compara SST.<br /><b>MS</b> (Cuadrado Medio) = SS/gl: normalización por grados de libertad para hacer comparables las sumas de cuadrados. <Tx m="MST" /> estima <Tx m={"\\sigma^2 + n\\sum\\tau_i^2/(k-1)"} /> y <Tx m="MSE" /> estima <Tx m="\sigma^2" /> puro.</Def>
           <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Valores numéricos</h4>
           <table style={S.T}><thead><tr><th style={S.th}>Fuente</th><th style={S.th}>SS</th><th style={S.th}>gl</th><th style={S.th}>MS</th><th style={S.th}><Tx m="F_0" /></th><th style={S.th}><Tx m="F_{\text{crit}}" /></th></tr></thead>
             <tbody>
@@ -310,10 +310,10 @@ export default function App() {
       <div style={S.q}>Pregunta 3: ¿Recomendaría SwiftPay (<Tx m="A_3" />) como estándar para el banco?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Comparaciones Múltiples — LSD de Fisher</h3>
-        <Def show={D}><b>LSD:</b> Prueba post-hoc que compara todos los pares <Tx m="(i,j)" /> tras rechazar <Tx m="H_0" />. Significativa si <Tx m="|\\bar{y}_i - \\bar{y}_j| > LSD" />.</Def>
+        <Def show={D}><b>LSD (Least Significant Difference):</b> Prueba de comparaciones múltiples post-hoc propuesta por Fisher. Se aplica solo después de rechazar <Tx m="H_0" /> en ANOVA para identificar cuáles pares de tratamientos difieren. Compara la diferencia absoluta entre medias muestrales <Tx m="|\\bar{y}_i - \\bar{y}_j|" /> con el umbral LSD; si la diferencia lo supera, el par es estadísticamente significativo al nivel <Tx m="\alpha" />. Es la prueba post-hoc menos conservadora: maximiza potencia pero no corrige por comparaciones múltiples.</Def>
         <h4 style={{ margin: "6px 0 3px", color: "#333", fontSize: 13 }}>Fórmula y cálculo</h4>
         <div style={S.fm}><TB m={`LSD = t_{\\alpha/2,\\,N-k}\\cdot\\sqrt{\\frac{2\\cdot MSE}{n}} = ${p1.tc}\\times\\sqrt{\\frac{2\\times${ff(p1.MSE, 6)}}{4}} = ${ff(p1.LSD, 4)}`} /></div>
-        <Def show={D}><b><Tx m={`t_{${a1 / 2},\\,N-k}`} />:</b> Percentil de Student con <Tx m="N-k" /> gl. <Tx m={"LSD = t_{\\alpha/2}\\sqrt{2 \\cdot MSE / n}"} />: mínima diferencia significativa entre pares.</Def>
+        <Def show={D}><b><Tx m={`t_{${a1 / 2},\\,N-k}`} /> (valor crítico t):</b> Percentil bilateral de la distribución t de Student con <Tx m="N-k" /> grados de libertad. Se usa bilateral porque la diferencia puede ser en cualquier dirección.<br /><b>Fórmula LSD:</b> <Tx m={"LSD = t_{\\alpha/2,\\,N-k}\\sqrt{2 \\cdot MSE / n}"} />. Es la mínima diferencia entre dos medias muestrales que se considera estadísticamente significativa. <Tx m="MSE" /> proviene del ANOVA (varianza conjunta) y <Tx m="n" /> es el tamaño de cada grupo.</Def>
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Resultados</h4>
         <table style={S.T}><thead><tr><th style={S.th}>Comparación</th><th style={S.th}><Tx m={"|\\bar{y}_i-\\bar{y}_j|"} /></th><th style={S.th}>LSD</th><th style={S.th}>Resultado</th></tr></thead>
           <tbody>{p1.cmp.map((x, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}>{x.a} vs {x.b}</td><td style={S.td}>{ff(x.diff, 4)}</td><td style={S.td}>{ff(p1.LSD, 4)}</td><td style={{ ...S.td, fontWeight: 700, color: x.sig ? "#2e7d32" : "#c62828" }}>{x.sig ? "Significativa" : "No significativa"}</td></tr>)}</tbody></table>
@@ -331,9 +331,9 @@ export default function App() {
       <div style={S.q}>Pregunta 4: ¿Apoyaría el supuesto de normalidad?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Supuesto de Normalidad</h3>
-        <Def show={D}><b>Supuesto:</b> <Tx m="\varepsilon_{ij} \sim N(0,\sigma^2)" />. Violación → <Tx m="F_0" /> y p-valor no confiables. Se verifica mediante residuos <Tx m={"e_{ij} = y_{ij} - \\bar{y}_i"} />.</Def>
+        <Def show={D}><b>Supuesto de normalidad:</b> El modelo ANOVA requiere que los errores sean <Tx m="\varepsilon_{ij} \sim N(0,\sigma^2)" />, es decir, distribuidos normalmente con media cero y varianza constante. Si se viola este supuesto, las distribuciones de referencia (<Tx m="F" /> y <Tx m="t" />) dejan de ser exactas, haciendo que los p-valores y las regiones críticas sean incorrectos. Se verifica indirectamente a través de los residuos <Tx m={"e_{ij} = y_{ij} - \\bar{y}_i"} />, que deben aproximarse a una distribución normal sin patrones visibles.</Def>
         <div style={S.fm}><TB m={`e_{ij} = y_{ij} - \\bar{y}_i`} /></div>
-        <Def show={D}><b><Tx m="e_{ij}" />:</b> Residuo = estimación de <Tx m="\varepsilon_{ij}" />. Si el modelo es correcto, <Tx m={"e_{ij} \\approx N(0,\\sigma^2)"} /> sin patrones.</Def>
+        <Def show={D}><b><Tx m="e_{ij}" /> (residuo):</b> Estimación muestral del error teórico <Tx m="\varepsilon_{ij}" />. Se calcula como la diferencia entre cada observación y la media de su grupo. Si el modelo es adecuado, los residuos deben: (1) estar centrados en 0, (2) no mostrar tendencias ni asimetrías, (3) tener dispersión homogénea entre grupos, (4) no presentar valores atípicos. Formalmente: <Tx m={"e_{ij} \\approx N(0,\\sigma^2)"} />.</Def>
         <p style={{ fontSize: 12 }}>Residuos ordenados:</p>
         <div style={S.fm}><TB m={`\\{${p1.resSorted.map(r => ff(r, 4)).join(',\\;')}\\}`} /></div>
         <p style={{ fontSize: 13 }}>• Simétricos alrededor de 0 • Sin outliers • Rango acotado</p>
@@ -347,14 +347,15 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Supuesto de Aleatoriedad — Estadístico Z</h3>
         <Def show={D}>
-          <b>Racha:</b> Subsecuencia consecutiva de residuos del mismo signo (positivo o negativo) en el orden de observación.<br />
-          <b>Residuo:</b> <Tx m={"e_{ij} = y_{ij} - \\bar{y}_i"} /> — desviación de cada observación respecto a la media de su tratamiento.<br />
-          <b><Tx m="n_1" />:</b> Número de residuos <Tx m={"\\geq 0"} />. <b><Tx m="n_2" />:</b> Número de residuos <Tx m={"< 0"} />. <b><Tx m="N = n_1 + n_2" />.</b><br />
-          <b><Tx m="R" />:</b> Total de rachas observadas.<br />
-          <b><Tx m="E(R)" />:</b> Valor esperado: <Tx m={"E(R) = \\frac{2n_1 n_2}{N} + 1"} />.<br />
-          <b><Tx m={"\\sigma_R"} />:</b> Desviación estándar: <Tx m={"\\sigma_R = \\sqrt{\\frac{2n_1 n_2(2n_1 n_2 - N)}{N^2(N-1)}}"} />.<br />
-          <b><Tx m="Z_0" />:</b> Estadístico normalizado: <Tx m={"Z_0 = \\frac{R - E(R)}{\\sigma_R}"} />. Mide cuántas desviaciones estándar se aleja <Tx m="R" /> de su valor esperado.<br />
-          <b>Criterio:</b> Si <Tx m={`|Z_0| \\leq Z_{\\alpha/2}`} />, los residuos son consistentes con independencia.
+          <b>Supuesto de independencia:</b> ANOVA requiere que los errores <Tx m="\varepsilon_{ij}" /> sean independientes entre sí. Si existe dependencia (por ejemplo, mediciones sucesivas que se afectan mutuamente, efecto de calentamiento de caché, etc.), los estimadores siguen siendo insesgados pero los errores estándar se distorsionan, invalidando los intervalos de confianza y las pruebas de hipótesis.<br />
+          <b>Racha:</b> Secuencia ininterrumpida de residuos consecutivos del mismo signo en el orden en que fueron recolectados. Demasiadas pocas rachas sugiere agrupamiento (tendencia en los datos); demasiadas rachas sugiere alternancia forzada (datos manipulados o autocorrelación negativa).<br />
+          <b>Residuo:</b> <Tx m={"e_{ij} = y_{ij} - \\bar{y}_i"} /> — desviación de cada observación respecto a la media de su tratamiento. Se analizan en el orden de recolección para detectar patrones temporales.<br />
+          <b><Tx m="n_1" />:</b> Número de residuos no negativos (<Tx m={"e_{ij} \\geq 0"} />). <b><Tx m="n_2" />:</b> Número de residuos negativos (<Tx m={"e_{ij} < 0"} />). <b><Tx m="N = n_1 + n_2" /></b> = total de observaciones.<br />
+          <b><Tx m="R" />:</b> Total de rachas observadas en la secuencia de residuos.<br />
+          <b><Tx m="E(R)" />:</b> Valor esperado de rachas bajo independencia: <Tx m={"E(R) = \\frac{2n_1 n_2}{N} + 1"} />. Si los residuos son independientes, el número observado de rachas debería estar cerca de este valor.<br />
+          <b><Tx m={"\\sigma_R"} />:</b> Desviación estándar de R bajo independencia: <Tx m={"\\sigma_R = \\sqrt{\\frac{2n_1 n_2(2n_1 n_2 - N)}{N^2(N-1)}}"} />. Mide la dispersión natural del número de rachas.<br />
+          <b><Tx m="Z_0" /> (estadístico normalizado):</b> <Tx m={"Z_0 = \\frac{R - E(R)}{\\sigma_R}"} />. Transforma la diferencia entre rachas observadas y esperadas a una escala estándar. Bajo independencia, <Tx m={"Z_0 \\approx N(0,1)"} />.<br />
+          <b>Criterio de decisión:</b> Si <Tx m={`|Z_0| \\leq Z_{\\alpha/2}`} />, no hay evidencia de dependencia y el supuesto se sostiene. Valores <Tx m="|Z_0|" /> grandes indican desviación significativa del patrón aleatorio esperado.
         </Def>
 
         <div style={S.cd}>
@@ -397,14 +398,14 @@ export default function App() {
       <div style={S.q}>Pregunta 6: ¿Las tres arquitecturas presentan la misma varianza?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Homocedasticidad</h3>
-        <Def show={D}><b>Homocedasticidad:</b> <Tx m="\sigma_1^2 = \sigma_2^2 = \cdots = \sigma_k^2" />. Violación inflata o deflata <Tx m="F_0" />, invalidando el nivel <Tx m="\alpha" />.</Def>
+        <Def show={D}><b>Homocedasticidad (igualdad de varianzas):</b> ANOVA asume que la varianza del error es igual en todos los tratamientos: <Tx m="\sigma_1^2 = \sigma_2^2 = \cdots = \sigma_k^2" />. Si un grupo tiene varianza mucho mayor que otro, el estadístico <Tx m="F_0" /> se distorsiona: puede inflarse (aumentando falsos positivos) o desinflarse (reduciendo la potencia). Con tamaños de muestra iguales, ANOVA es robusto ante violaciones moderadas de este supuesto. Se evalúa comparando las varianzas muestrales <Tx m="s_i^2" /> entre grupos.</Def>
         <div style={S.fm}><TB m={`s_i^2 = \\frac{1}{n-1}\\sum_{j=1}^{n}(y_{ij}-\\bar{y}_i)^2`} /></div>
         <table style={S.T}><thead><tr><th style={S.th}>Arquitectura</th><th style={S.th}><Tx m="s_i^2" /></th><th style={S.th}><Tx m="s_i" /></th></tr></thead>
           <tbody>{p1.nm.map((nm, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}>{nm}</td><td style={S.td}>{ff(p1.vr[i], 6)}</td><td style={S.td}>{ff(Math.sqrt(p1.vr[i]), 4)}</td></tr>)}</tbody></table>
         {(() => {
           const rat = Math.max(...p1.vr) / Math.min(...p1.vr); return <>
             <div style={S.fm}><TB m={`\\frac{s^2_{\\max}}{s^2_{\\min}} = ${ff(rat, 2)}`} /></div>
-            <Def show={D}><b>Regla:</b> Si <Tx m={"s^2_{\\max}/s^2_{\\min} < 3"} /> con <Tx m="n_i" /> iguales, ANOVA es robusto ante heterocedasticidad moderada.</Def>
+            <Def show={D}><b>Regla práctica de razón de varianzas:</b> Si la razón entre la varianza muestral mayor y la menor es <Tx m={"s^2_{\\max}/s^2_{\\min} < 3"} />, la violación de homocedasticidad se considera moderada. Con diseño balanceado (<Tx m="n_i" /> iguales), ANOVA mantiene el control del error Tipo I aun con esta violación. Para razones mayores a 3, se recomienda usar pruebas como Levene o Bartlett, y considerar alternativas como Welch-ANOVA.</Def>
             <div style={S.ok}><b>Respuesta:</b> La razón de varianzas es {ff(rat, 2)}. {rat < 3 ? "Esto indica una violación leve; " : "Esto sugiere que las varianzas no son exactamente iguales; sin embargo, "}con tamaños iguales (<Tx m="n=4" />), <b>ANOVA es robusto</b> ante esta violación y las conclusiones se mantienen.</div>
           </>;
         })()}
@@ -416,7 +417,7 @@ export default function App() {
       <div style={S.q}>Pregunta 7: Si no se cumplen los supuestos, ¿se mantienen las conclusiones del inciso 2?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Robustez de las Conclusiones</h3>
-        <Def show={D}><b>Robustez:</b> Con <Tx m="n_i" /> iguales, ANOVA tolera violaciones moderadas de normalidad y homocedasticidad sin alterar significativamente el nivel <Tx m="\alpha" />.</Def>
+        <Def show={D}><b>Robustez del ANOVA:</b> Un procedimiento estadístico es robusto cuando sus resultados (nivel de error Tipo I, potencia) se mantienen aproximadamente válidos incluso si los supuestos del modelo no se cumplen exactamente. ANOVA es particularmente robusto cuando: (1) los tamaños de muestra son iguales (<Tx m="n_i" /> iguales → diseño balanceado), (2) las desviaciones de normalidad son moderadas (curtosis, asimetría leves), (3) la heterocedasticidad no es severa (<Tx m={"s^2_{\\max}/s^2_{\\min} < 3"} />). Un estadístico <Tx m="F_0" /> que supera ampliamente a <Tx m="F_c" /> refuerza la robustez de la conclusión.</Def>
         <table style={S.T}><thead><tr><th style={S.th}>Supuesto</th><th style={S.th}>Estado</th><th style={S.th}>Impacto</th></tr></thead>
           <tbody>
             <tr><td style={{ ...S.td, fontWeight: 600 }}>Normalidad</td><td style={{ ...S.td, color: "#2e7d32", fontWeight: 600 }}>Razonable</td><td style={{ ...S.td, textAlign: "left" }}>Sin evidencia en contra</td></tr>
@@ -426,7 +427,7 @@ export default function App() {
         <p style={{ fontSize: 13, marginTop: 8 }}>1. <b>Diseño balanceado</b> (<Tx m="n_1=n_2=n_3=4" />) → ANOVA robusto.</p>
         <p style={{ fontSize: 13 }}>2. <b><Tx m="F_0" /> holgado:</b> <Tx m={`${f2(p1.F0)}/${p1.Fc} \\approx ${ff(p1.F0 / p1.Fc, 1)}`} /> veces el valor crítico.</p>
         <p style={{ fontSize: 13 }}>3. <b>Normalidad</b> no rechazada por inspección de residuos.</p>
-        <Def show={D}><b>Señal fuerte:</b> <Tx m={"F_0/F_c \\gg 1"} /> indica que violaciones moderadas de supuestos no alteran la decisión estadística.</Def>
+        <Def show={D}><b>Señal fuerte (margen de seguridad):</b> Cuando <Tx m={"F_0/F_c \\gg 1"} />, el estadístico de prueba supera el umbral crítico por un margen amplio. Esto significa que incluso si los supuestos se violan moderadamente (lo que podría desplazar ligeramente <Tx m="F_0" /> o modificar la distribución de referencia), la decisión de rechazar <Tx m="H_0" /> probablemente no cambiaría. Es un indicador cualitativo de la solidez de la conclusión frente a imperfecciones del modelo.</Def>
         <div style={S.ok}><b>Respuesta:</b> Aun si los supuestos no se cumplen estrictamente, <b>las conclusiones se mantienen</b>. El diseño balanceado y <Tx m={`F_0=${f2(p1.F0)}`} /> (ampliamente superior a {p1.Fc}) otorgan robustez. Se recomienda más réplicas para confirmar con mayor rigor.</div>
       </div>
     </div>),
@@ -439,7 +440,7 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Mínimos Cuadrados Ordinarios</h3>
         <div style={S.fm}><TB m={"\\hat{\\boldsymbol{\\beta}} = (\\mathbf{X}^\\top\\mathbf{X})^{-1}\\mathbf{X}^\\top\\mathbf{Y}"} /></div>
-        <Def show={D}><b>MCO:</b> Minimiza <Tx m={"\\sum e_i^2 = \\sum(y_i - \\hat{y}_i)^2"} />. Solución: <Tx m={"\\hat{\\beta}=(X'X)^{-1}X'Y"} />.<br /><b>SE:</b> <Tx m={"SE(\\hat{\\beta}_i) = \\sqrt{MSE \\cdot c_{ii}}"} />, donde <Tx m={"c_{ii} = [(X'X)^{-1}]_{ii}"} />.</Def>
+        <Def show={D}><b>MCO (Mínimos Cuadrados Ordinarios):</b> Método que encuentra los valores de <Tx m={"\\hat{\\beta}"} /> que minimizan la suma de errores cuadráticos: <Tx m={"\\sum e_i^2 = \\sum(y_i - \\hat{y}_i)^2"} />. La solución cerrada es <Tx m={"\\hat{\\beta}=(X'X)^{-1}X'Y"} />, que existe siempre que <Tx m="X'X" /> sea invertible (columnas linealmente independientes). Bajo los supuestos de Gauss-Markov, MCO produce los estimadores lineales insesgados de mínima varianza (BLUE).<br /><b>SE (Error Estándar):</b> <Tx m={"SE(\\hat{\\beta}_i) = \\sqrt{MSE \\cdot c_{ii}}"} />, donde <Tx m={"c_{ii} = [(X'X)^{-1}]_{ii}"} /> es el i-ésimo elemento diagonal de la inversa. Mide la precisión de cada estimador: valores pequeños indican estimaciones más estables.</Def>
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Tabla de símbolos</h4>
         <table style={S.T}><thead><tr><th style={S.thF}>Param.</th><th style={S.thF}>Variable</th><th style={S.thF}>Significado</th></tr></thead>
           <tbody>{bN.map((nm, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={nm} /></td><td style={S.td}>{i === 0 ? "—" : <Tx m={`x_${i}`} />}</td><td style={{ ...S.td, textAlign: "left" }}>{bD[i]}</td></tr>)}</tbody></table>
@@ -465,14 +466,14 @@ export default function App() {
       <div style={S.q}>Pregunta 3: ANOVA para bondad de ajuste del modelo.</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>ANOVA para RLM — 8 Pasos</h3>
-        <Def show={D}><b>Prueba global:</b> <Tx m={"H_0: \\beta_1 = \\cdots = \\beta_p = 0"} />. Si <Tx m={"F_0 > F_c"} />, al menos una variable explica <Tx m="Y" />.</Def>
+        <Def show={D}><b>Prueba global de significancia:</b> Evalúa si el modelo de regresión completo tiene capacidad explicativa. <Tx m={"H_0: \\beta_1 = \\cdots = \\beta_p = 0"} /> — ninguna variable predictora tiene relación lineal con Y. Si <Tx m={"F_0 > F_c"} />, al menos una variable contribuye significativamente a explicar la variabilidad de <Tx m="Y" />. A diferencia de las pruebas individuales, esta prueba evalúa el conjunto de variables simultáneamente.</Def>
         <div style={S.sp}><div style={S.spT}>Pasos 1-4</div>
           <p><Tx m={`n=20,\\;p=4,\\;gl_{reg}=4,\\;gl_{error}=15`} />. <Tx m={`\\alpha=${a2}`} /></p>
           <div style={S.fm}><TB m={"H_0:\\beta_1=\\beta_2=\\beta_3=\\beta_4=0\\qquad H_1:\\text{Al menos un }\\beta_i\\neq 0"} /></div>
         </div>
         <div style={S.sp}><div style={S.spT}>Pasos 5-6</div>
           <div style={S.fm}><TB m={`F_0=\\frac{MSR}{MSE}\\sim F_{(4,15)},\\qquad\\text{Rechazar si }F_0>${p2.Fc}`} /></div>
-          <Def show={D}><b>MSR</b> = SSR/p: varianza explicada por regresión.<br /><b>MSE</b> = SSE/(n−p−1): varianza residual. <Tx m={"F_0 = MSR/MSE"} />.</Def>
+          <Def show={D}><b>MSR</b> (Cuadrado Medio de Regresión) = SSR/p: varianza explicada por el modelo. Mide cuánta variabilidad de Y capturan los predictores en promedio por cada grado de libertad de regresión.<br /><b>MSE</b> (Cuadrado Medio del Error) = SSE/(n−p−1): varianza residual no explicada por el modelo. Estima <Tx m="\sigma^2" /> (varianza del error). Si el modelo es útil, <Tx m={"MSR \\gg MSE"} />, produciendo un <Tx m={"F_0 = MSR/MSE"} /> grande.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 7</div>
           <h4 style={{ margin: "4px 0 3px", color: "#333", fontSize: 13 }}>Fórmulas</h4>
@@ -503,7 +504,7 @@ export default function App() {
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Coeficiente de Determinación</h3>
         <h4 style={{ margin: "4px 0 3px", color: "#333", fontSize: 13 }}>Fórmulas</h4>
         <div style={S.fm}><TB m={"R^2=\\frac{SSR}{SST}=1-\\frac{SSE}{SST}"} /><TB m={"R^2_{\\text{adj}}=1-\\frac{(1-R^2)(n-1)}{n-p-1}"} /></div>
-        <Def show={D}><b><Tx m="R^2" />:</b> <Tx m={"SSR/SST \\in [0,1]"} /> — fracción de variabilidad explicada por el modelo.<br /><b><Tx m={"R^2_{\\text{adj}}"} />:</b> Penaliza por número de parámetros p; favorece parsimonia al comparar modelos.</Def>
+        <Def show={D}><b><Tx m="R^2" /> (coeficiente de determinación):</b> <Tx m={"R^2 = SSR/SST \\in [0,1]"} /> — proporción de la variabilidad total de Y que es explicada por el modelo de regresión. Un <Tx m="R^2" /> cercano a 1 indica buen ajuste; cercano a 0, que el modelo no explica la variable respuesta. Sin embargo, <Tx m="R^2" /> siempre crece (o no decrece) al agregar variables, incluso si son irrelevantes.<br /><b><Tx m={"R^2_{\\text{adj}}"} /> (ajustado):</b> Corrige <Tx m="R^2" /> penalizando por el número de parámetros p en el modelo. Puede disminuir si se agregan variables que no aportan. Es la métrica preferida para comparar modelos con distinto número de variables, ya que favorece la parsimonia.</Def>
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Cálculo</h4>
         <div style={S.fm}><TB m={`R^2=\\frac{${ff(p2.SSR, 4)}}{${ff(p2.SST, 4)}}=${ff(p2.R2, 4)}`} /><TB m={`R^2_{\\text{adj}}=${ff(p2.R2a, 4)}`} /></div>
         <div style={S.ok}><b>Respuesta:</b> El modelo explica el <b>{ff(p2.R2 * 100, 2)}%</b> de la variabilidad del uso de CPU. <Tx m={`R^2_{\\text{adj}}=${ff(p2.R2a * 100, 2)}\\%`} />. El {ff((1 - p2.R2) * 100, 2)}% restante corresponde a factores no incluidos o variabilidad aleatoria.</div>
@@ -515,7 +516,7 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Intervalos de Confianza</h3>
         <div style={S.fm}><TB m={`IC_{${(1 - a2) * 100}\\%}:\\;\\hat{\\beta}_i\\pm t_{${a2 / 2},\\,15}\\cdot SE(\\hat{\\beta}_i),\\quad t_{${a2 / 2},15}=${p2.tc}`} /></div>
-        <Def show={D}><b>IC:</b> <Tx m={"\\hat{\\beta}_i \\pm t_{\\alpha/2,\\,n-p-1} \\cdot SE(\\hat{\\beta}_i)"} />. Si <Tx m={"0 \\in IC"} /> → <Tx m="\beta_i" /> no es significativamente distinto de 0.</Def>
+        <Def show={D}><b>IC (Intervalo de Confianza):</b> <Tx m={"\\hat{\\beta}_i \\pm t_{\\alpha/2,\\,n-p-1} \\cdot SE(\\hat{\\beta}_i)"} />. Rango de valores plausibles para el verdadero parámetro <Tx m="\beta_i" /> con un nivel de confianza del {(1 - a2) * 100}%. Si el intervalo contiene 0 (<Tx m={"0 \\in IC"} />), no se puede afirmar que <Tx m="\beta_i" /> sea estadísticamente distinto de cero, lo que sugiere que la variable <Tx m={`x_i`} /> podría no aportar al modelo. La amplitud del IC refleja la precisión del estimador: ICs estrechos indican mayor precisión.</Def>
         <table style={S.T}><thead><tr><th style={S.th}></th><th style={S.th}><Tx m={"\\hat{\\beta}_i"} /></th><th style={S.th}>SE</th><th style={S.th}>Inferior</th><th style={S.th}>Superior</th><th style={S.th}><Tx m={"0\\in IC"} /></th></tr></thead>
           <tbody>{bN.map((nm, i) => { const c0 = p2.cl[i] <= 0 && p2.ch[i] >= 0; return <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={nm} /></td><td style={S.td}>{ff(p2.b[i], 4)}</td><td style={S.td}>{ff(p2.se[i], 4)}</td><td style={S.td}>{ff(p2.cl[i], 4)}</td><td style={S.td}>{ff(p2.ch[i], 4)}</td><td style={{ ...S.td, fontWeight: 700, color: c0 ? "#c62828" : "#2e7d32" }}>{c0 ? "Sí" : "No"}</td></tr>; })}</tbody></table>
         <div style={S.ok}><b>Respuesta:</b> Los parámetros cuyo IC no contiene 0 son significativos al {(1 - a2) * 100}% de confianza para el modelo de CPU de SwiftPay.</div>
@@ -526,10 +527,10 @@ export default function App() {
       <div style={S.q}>Pregunta 6: ¿El aporte de cada <Tx m="X_i" /> es significativo (5%)?</div>
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Significancia Individual — 8 Pasos</h3>
-        <Def show={D}><b>Significancia individual:</b> Prueba <Tx m={"H_0: \\beta_i = 0"} /> para cada variable por separado. Rechazar si <Tx m={"|t_0| > t_c"} />.</Def>
+        <Def show={D}><b>Significancia individual:</b> Mientras la prueba global (ANOVA) evalúa el modelo completo, las pruebas individuales evalúan cada variable por separado. Para cada <Tx m={"x_i"} />, se prueba <Tx m={"H_0: \\beta_i = 0"} /> (esa variable no aporta, dado que las demás están en el modelo). Se rechaza si <Tx m={"|t_0| > t_c"} />. Es posible que el modelo sea significativo globalmente pero que variables individuales no lo sean — esto sugiere redundancia o multicolinealidad entre predictores.</Def>
         <div style={S.sp}><div style={S.spT}>Pasos 1-6</div>
           <div style={S.fm}><TB m={`H_0:\\beta_i=0\\quad H_1:\\beta_i\\neq 0\\quad\\alpha=${a2}`} /><TB m={`t_0=\\frac{\\hat{\\beta}_i}{SE(\\hat{\\beta}_i)},\\quad\\text{Rechazar si }|t_0|>t_{${a2 / 2},15}=${p2.tc}`} /></div>
-          <Def show={D}><b><Tx m="t_0" />:</b> <Tx m={"t_0 = \\hat{\\beta}_i / SE(\\hat{\\beta}_i)"} /> — distancia estandarizada de <Tx m={"\\hat{\\beta}_i"} /> a 0. Rechazar si <Tx m={`|t_0| > ${p2.tc}`} />.</Def>
+          <Def show={D}><b><Tx m="t_0" /> (estadístico t individual):</b> <Tx m={"t_0 = \\hat{\\beta}_i / SE(\\hat{\\beta}_i)"} /> — mide la distancia estandarizada del estimador <Tx m={"\\hat{\\beta}_i"} /> respecto a 0. Si el verdadero <Tx m="\beta_i = 0" />, <Tx m={"t_0 \\sim t_{(n-p-1)}"} /> y valores de <Tx m="|t_0|" /> cercanos a 0 son probables. Valores grandes indican que <Tx m={"\\hat{\\beta}_i"} /> está demasiado lejos de 0 para ser producto del azar. Rechazar si <Tx m={`|t_0| > ${p2.tc}`} />.</Def>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 7: Cálculos</div>
           <table style={S.T}><thead><tr><th style={S.th}>Variable</th><th style={S.th}><Tx m={"\\hat{\\beta}_i"} /></th><th style={S.th}>SE</th><th style={S.th}><Tx m="t_0" /></th><th style={S.th}><Tx m={`|t_0|\\text{ vs }${p2.tc}`} /></th><th style={S.th}>Decisión</th></tr></thead>
