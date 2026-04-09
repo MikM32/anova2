@@ -565,7 +565,7 @@ export default function App() {
       </div>
       <div style={S.tbar}>
         <button style={S.mt(tab === "p1")} onClick={() => setTab("p1")}>PARTE I: ANOVA</button>
-        <button style={S.mt(tab === "p2")} onClick={() => setTab("p1")}></button>
+        <button style={S.mt(tab === "p2")} onClick={() => setTab("p2")}>PARTE II</button>
       </div>
       <div style={{ background: "#fff", border: "1px solid #ddd", borderTop: "none", borderRadius: "0 0 8px 8px", padding: 12 }}>
         {edit && (tab === "p1" ? <Ed1 /> : <Ed2 />)}
