@@ -26,6 +26,8 @@ function fPDF(x, d1, d2) { if (x <= 0) return 0; const lnB = lnGamma(d1 / 2) + l
 function betacf(x, a, b) { var m, m2, num; var qab = a + b, qap = a + 1, qam = a - 1; var c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < 1e-30) d = 1e-30; d = 1 / d; var h = d; for (m = 1; m <= 100; m++) { m2 = 2 * m; num = m * (b - m) * x / ((qam + m2) * (a + m2)); d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30; d = 1 / d; h *= d * c; num = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + num * d; if (Math.abs(d) < 1e-30) d = 1e-30; c = 1 + num / c; if (Math.abs(c) < 1e-30) c = 1e-30; d = 1 / d; var del = d * c; h *= del; if (Math.abs(del - 1) < 3e-7) break; } return h; }
 function betai(a, b, x) { var bt; if (x === 0 || x === 1) bt = 0; else bt = Math.exp(lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x)); if (x < (a + 1) / (a + b + 2)) return bt * betacf(x, a, b) / a; else return 1 - bt * betacf(1 - x, b, a) / b; }
 function fPValue(F, d1, d2) { if (F <= 0) return 1; return betai(d2 / 2, d1 / 2, d2 / (d2 + d1 * F)); }
+// ===== Normal CDF =====
+function normCDF(x) { var t = 1 / (1 + 0.2316419 * Math.abs(x)); var d = 0.3989423 * Math.exp(-x * x / 2); var p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); if (x > 0) p = 1 - p; return p; }
 
 // ===== Default data =====
 const DEF1 = [[3.30, 3.42, 3.36, 3.34], [3.25, 3.15, 3.30, 3.20], [3.10, 3.25, 3.18, 3.12]];
@@ -59,6 +61,11 @@ function calc1(data, sigma, alpha) {
     sw_steps.push({ i: i + 1, a: a_SW[i], xn: resSorted[11 - i], x1: resSorted[i], diff, prod });
   }
   const W_calc = (b_SW ** 2) / SSE;
+  const lnN = Math.log(N);
+  const mu_sw = 0.0038915 * Math.pow(lnN, 3) - 0.083751 * Math.pow(lnN, 2) - 0.31082 * lnN - 1.5861;
+  const sig_sw = Math.exp(0.0030302 * Math.pow(lnN, 2) - 0.082676 * lnN - 0.4803);
+  const z_sw = W_calc < 1 ? (Math.log(1 - W_calc) - mu_sw) / sig_sw : -99;
+  const pval_SW = 1 - normCDF(z_sw);
   // Runs test on residuals in observation order
   let runs = 1; for (let i = 1; i < res.length; i++) if ((res[i] >= 0) !== (res[i - 1] >= 0)) runs++;
   const n1 = res.filter(e => e >= 0).length, n2 = res.filter(e => e < 0).length;
@@ -69,7 +76,7 @@ function calc1(data, sigma, alpha) {
   const Zcrit = alpha === 0.01 ? 2.576 : alpha === 0.05 ? 1.96 : 1.645;
   const runsOk = Math.abs(Z0runs) <= Zcrit;
   const pval = fPValue(F0, k - 1, N - k);
-  return { data, nm, k, n, N, sigma, alpha, mn, gm, tau, SST, SSE, SSTot, MST, MSE, F0, Fc, tc, LSD, cmp, vr, res, resSorted, runs, n1, n2, ER, VR, sdR, Z0runs, Zcrit, runsOk, rejected: F0 > Fc, pval, a_SW, b_SW, sw_steps, W_calc };
+  return { data, nm, k, n, N, sigma, alpha, mn, gm, tau, SST, SSE, SSTot, MST, MSE, F0, Fc, tc, LSD, cmp, vr, res, resSorted, runs, n1, n2, ER, VR, sdR, Z0runs, Zcrit, runsOk, rejected: F0 > Fc, pval, a_SW, b_SW, sw_steps, W_calc, pval_SW };
 }
 
 function calc2(raw, alpha, xp) {
@@ -97,8 +104,8 @@ function calc2(raw, alpha, xp) {
 
 // ===== Number input =====
 function NI({ value, onChange, w = 58 }) {
-  return <input type="number" step="any" value={value} onChange={e => onChange(parseFloat(e.target.value) || 0)}
-    style={{ width: w, padding: "3px 4px", border: "1px solid #cbd5e1", borderRadius: 4, fontSize: 12, textAlign: "center", background: "#fffbeb" }} />;
+  return <input type="text" inputMode="decimal" value={value !== undefined ? value : ""} onChange={e => onChange(e.target.value)}
+    style={{ width: w, padding: "3px 4px", border: "1px solid #cbd5e1", borderRadius: 4, fontSize: 13, textAlign: "center", background: "#fffbeb", color: "#1e293b", fontWeight: 600, outline: "none" }} />;
 }
 
 // ===== Fisher Chart =====
@@ -148,7 +155,106 @@ function FisherChart({ d1, d2, F0, Fc, alpha }) {
   return <canvas ref={canvasRef} width={500} height={200} style={{ width: "100%", maxWidth: 500, height: "auto", border: "1px solid #e0e0e0", borderRadius: 6, background: "#fafbfc", marginTop: 8 }} />;
 }
 
-// ===== MAIN =====
+const t1 = ["1. Modelo", "2. ANOVA", "3. Comparaciones", "4. Normalidad", "5. Aleatoriedad", "6. Varianzas", "7. Supuestos"];
+const t2 = ["1. MCO", "2. Predicción", "3. ANOVA", "4. R\u00B2", "5. IC", "6. Signif.", "7. Modelo"];
+const bN = ["\\beta_0", "\\beta_1", "\\beta_2", "\\beta_3", "\\beta_4"];
+const bD = ["Intercepto", "Peticiones/s", "Tam. trama", "Lat. bóveda", "Mem. microserv."];
+const arqN = ["SwiftVen", "SwiftFast", "SwiftPay"];
+
+const S = {
+  bx: { fontFamily: "'Segoe UI',system-ui,sans-serif", maxWidth: 960, margin: "0 auto", padding: 12, color: "#1a1a2e", fontSize: 14, paddingBottom: 65 },
+  hd: { textAlign: "center", padding: "16px 0 8px", borderBottom: "3px solid #0f3460" },
+  h1: { fontSize: 19, fontWeight: 700, color: "#0f3460", margin: 0 },
+  h2: { fontSize: 12, color: "#555", margin: "4px 0 0", fontWeight: 400 },
+  tbar: { display: "flex", gap: 4, marginTop: 12, flexWrap: "wrap" },
+  mt: a => ({ padding: "7px 16px", border: "none", borderRadius: "6px 6px 0 0", cursor: "pointer", fontWeight: 600, fontSize: 13, background: a ? "#0f3460" : "#ddd", color: a ? "#fff" : "#333" }),
+  sb: { display: "flex", gap: 2, flexWrap: "wrap", marginBottom: 8, background: "#f0f0f0", padding: 4, borderRadius: 6 },
+  st: a => ({ padding: "4px 8px", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 11, fontWeight: a ? 600 : 400, background: a ? "#16213e" : "transparent", color: a ? "#fff" : "#333", whiteSpace: "nowrap" }),
+  cd: { background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 14, marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" },
+  T: { width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 6 },
+  th: { background: "#0f3460", color: "#fff", padding: "5px 6px", textAlign: "center", fontSize: 11 },
+  thF: { background: "#1e3a5f", color: "#fff", padding: "5px 6px", textAlign: "center", fontSize: 11, fontStyle: "italic" },
+  td: { padding: "4px 6px", textAlign: "center", borderBottom: "1px solid #eee", fontSize: 12 },
+  fm: { background: "#f8f9fa", padding: "8px 12px", borderRadius: 6, margin: "8px 0", borderLeft: "3px solid #0f3460", overflowX: "auto" },
+  sp: { background: "#fafbfc", padding: "10px 12px", borderRadius: 6, marginBottom: 7, borderLeft: "4px solid #e94560" },
+  spT: { fontWeight: 700, color: "#e94560", fontSize: 12, marginBottom: 3 },
+  ok: { background: "#e8f5e9", padding: "10px 12px", borderRadius: 6, fontWeight: 600, color: "#2e7d32", marginTop: 8, fontSize: 13 },
+  wn: { background: "#fff3e0", padding: "10px 12px", borderRadius: 6, color: "#e65100", marginTop: 8 },
+  q: { background: "#e3f2fd", padding: "8px 12px", borderRadius: 6, fontWeight: 600, color: "#0d47a1", marginBottom: 8, borderLeft: "4px solid #1976d2", fontSize: 13 },
+  ed: { background: "#f0f9ff", border: "1px solid #0284c7", borderRadius: 8, padding: 16, marginBottom: 16, boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)" },
+  edH: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, borderBottom: "1px solid #bae6fd", paddingBottom: 8 },
+  btn: (bg) => ({ padding: "6px 14px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 12, fontWeight: 600, background: bg, color: "#fff", transition: "0.2s" }),
+  sel: { padding: "5px 8px", border: "1px solid #94a3b8", borderRadius: 4, fontSize: 12, background: "#fff" },
+  fab: { position: "fixed", bottom: 18, right: 18, display: "flex", gap: 6, zIndex: 999 },
+  fabBtn: (bg) => ({ padding: "7px 12px", borderRadius: 18, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, boxShadow: "0 2px 8px rgba(0,0,0,0.2)", background: bg, color: "#fff" }),
+};
+
+function DataEditor1({ initialD, initialSig, initialA, onApply, onCancel }) {
+  const [d, setD] = useState(() => initialD.map(r => [...r]));
+  const [sig, setSig] = useState(initialSig);
+  const [a, setA] = useState(initialA);
+
+  const upd = (i, j, v) => { const n = [...d]; n[i] = [...n[i]]; n[i][j] = v; setD(n); };
+  const reset = () => { setD(DEF1.map(r => [...r])); setSig(0.18); setA(0.05); };
+
+  return (
+    <div style={S.ed}>
+      <div style={S.edH}>
+        <b style={{ color: "#0369a1", fontSize: 14 }}>Modo de Edición — Parte I</b>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={S.btn("#dc2626")} onClick={reset}>Restablecer a Fábrica</button>
+          <button style={S.btn("#64748b")} onClick={onCancel}>Cancelar</button>
+          <button style={S.btn("#0ea5e9")} onClick={() => onApply(d, sig, a)}>💾 Aplicar y Recalcular</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+        <label style={{ fontSize: 12 }}><Tx m="\sigma" /> = <NI value={sig} onChange={setSig} w={55} /></label>
+        <label style={{ fontSize: 12 }}><Tx m="\alpha" /> = <select style={S.sel} value={a} onChange={e => setA(parseFloat(e.target.value))}>{ALPHAS.map(x => <option key={x} value={x}>{x}</option>)}</select></label>
+      </div>
+      <table style={S.T}>
+        <thead><tr><th style={S.th}>Arquitectura</th>{[1, 2, 3, 4].map(j => <th key={j} style={S.th}>Represión {j}</th>)}</tr></thead>
+        <tbody>
+          {d.map((row, i) => <tr key={i}><td style={{ ...S.td, fontWeight: 600 }}>{arqN[i]}</td>{row.map((v, j) => <td key={j} style={S.td}><NI value={v} onChange={x => upd(i, j, x)} w={52} /></td>)}</tr>)}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DataEditor2({ initialD, initialA, initialXp, onApply, onCancel }) {
+  const [d, setD] = useState(() => initialD.map(r => [...r]));
+  const [a, setA] = useState(initialA);
+  const [xp, setXp] = useState([...initialXp]);
+
+  const upd = (i, j, v) => { const n = [...d]; n[i] = [...n[i]]; n[i][j] = v; setD(n); };
+  const updXp = (i, v) => { const n = [...xp]; n[i] = v; setXp(n); };
+  const reset = () => { setD(DEF2.map(r => [...r])); setA(0.05); setXp([...DEFXP]); };
+
+  return (
+    <div style={S.ed}>
+      <div style={S.edH}>
+        <b style={{ color: "#0369a1", fontSize: 14 }}>Modo de Edición — Parte II</b>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={S.btn("#dc2626")} onClick={reset}>Restablecer</button>
+          <button style={S.btn("#64748b")} onClick={onCancel}>Cancelar</button>
+          <button style={S.btn("#0ea5e9")} onClick={() => onApply(d, a, xp)}>💾 Aplicar y Recalcular</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+        <label style={{ fontSize: 12 }}><Tx m="\alpha" /> = <select style={S.sel} value={a} onChange={e => setA(parseFloat(e.target.value))}>{ALPHAS.map(x => <option key={x} value={x}>{x}</option>)}</select></label>
+        <span style={{ fontSize: 12 }}>Predicción:</span>
+        {xp.map((v, i) => <label key={i} style={{ fontSize: 12 }}><Tx m={`x_${i + 1}`} />=<NI value={v} onChange={x => updXp(i, x)} w={48} /></label>)}
+      </div>
+      <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 4 }}>
+        <table style={{ ...S.T, marginTop: 0 }}>
+          <thead style={{ position: "sticky", top: 0 }}><tr><th style={S.th}>#</th><th style={S.th}>y</th><th style={S.th}><Tx m="x_1" /></th><th style={S.th}><Tx m="x_2" /></th><th style={S.th}><Tx m="x_3" /></th><th style={S.th}><Tx m="x_4" /></th></tr></thead>
+          <tbody>{d.map((row, i) => <tr key={i}><td style={{ ...S.td, fontWeight: 600, fontSize: 10 }}>{i + 1}</td>{row.map((v, j) => <td key={j} style={S.td}><NI value={v} onChange={x => upd(i, j, x)} w={46} /></td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState("p1");
   const [s1, setS1] = useState(0);
@@ -167,75 +273,15 @@ export default function App() {
   const [a2, setA2] = useState(0.05);
   const [xp, setXp] = useState([...DEFXP]);
 
-  const p1 = useMemo(() => calc1(d1, sig, a1), [d1, sig, a1]);
-  const p2 = useMemo(() => calc2(d2, a2, xp), [d2, a2, xp]);
+  const p1 = useMemo(() => calc1(d1.map(r => r.map(v => parseFloat(v) || 0)), parseFloat(sig) || 0, parseFloat(a1) || 0.05), [d1, sig, a1]);
+  const p2 = useMemo(() => calc2(d2.map(r => r.map(v => parseFloat(v) || 0)), parseFloat(a2) || 0.05, xp.map(v => parseFloat(v) || 0)), [d2, a2, xp]);
+
+  const handleApply1 = (nd, nsig, na) => { setD1(nd); setSig(nsig); setA1(na); setEdit(false); };
+  const handleApply2 = (nd, na, nxp) => { setD2(nd); setA2(na); setXp(nxp); setEdit(false); };
 
   const D = defs;
-  const updD1 = (i, j, v) => { const n = d1.map(r => [...r]); n[i][j] = v; setD1(n); };
-  const updD2 = (i, j, v) => { const n = d2.map(r => [...r]); n[i][j] = v; setD2(n); };
-  const updXp = (i, v) => { const n = [...xp]; n[i] = v; setXp(n); };
-  const reset1 = () => { setD1(DEF1.map(r => [...r])); setSig(0.18); setA1(0.05); };
-  const reset2 = () => { setD2(DEF2.map(r => [...r])); setA2(0.05); setXp([...DEFXP]); };
-
-  const t1 = ["1. Modelo", "2. ANOVA", "3. Comparaciones", "4. Normalidad", "5. Aleatoriedad", "6. Varianzas", "7. Supuestos"];
-  const t2 = ["1. MCO", "2. Predicción", "3. ANOVA", "4. R\u00B2", "5. IC", "6. Signif.", "7. Modelo"];
-  const bN = ["\\beta_0", "\\beta_1", "\\beta_2", "\\beta_3", "\\beta_4"];
-  const bD = ["Intercepto", "Peticiones/s", "Tam. trama", "Lat. bóveda", "Mem. microserv."];
-  const arqN = ["SwiftVen", "SwiftFast", "SwiftPay"];
-
-  const S = {
-    bx: { fontFamily: "'Segoe UI',system-ui,sans-serif", maxWidth: 960, margin: "0 auto", padding: 12, color: "#1a1a2e", fontSize: 14, paddingBottom: 65 },
-    hd: { textAlign: "center", padding: "16px 0 8px", borderBottom: "3px solid #0f3460" },
-    h1: { fontSize: 19, fontWeight: 700, color: "#0f3460", margin: 0 },
-    h2: { fontSize: 12, color: "#555", margin: "4px 0 0", fontWeight: 400 },
-    tbar: { display: "flex", gap: 4, marginTop: 12, flexWrap: "wrap" },
-    mt: a => ({ padding: "7px 16px", border: "none", borderRadius: "6px 6px 0 0", cursor: "pointer", fontWeight: 600, fontSize: 13, background: a ? "#0f3460" : "#ddd", color: a ? "#fff" : "#333" }),
-    sb: { display: "flex", gap: 2, flexWrap: "wrap", marginBottom: 8, background: "#f0f0f0", padding: 4, borderRadius: 6 },
-    st: a => ({ padding: "4px 8px", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 11, fontWeight: a ? 600 : 400, background: a ? "#16213e" : "transparent", color: a ? "#fff" : "#333", whiteSpace: "nowrap" }),
-    cd: { background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 14, marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" },
-    T: { width: "100%", borderCollapse: "collapse", fontSize: 12, marginTop: 6 },
-    th: { background: "#0f3460", color: "#fff", padding: "5px 6px", textAlign: "center", fontSize: 11 },
-    thF: { background: "#1e3a5f", color: "#fff", padding: "5px 6px", textAlign: "center", fontSize: 11, fontStyle: "italic" },
-    td: { padding: "4px 6px", textAlign: "center", borderBottom: "1px solid #eee", fontSize: 12 },
-    fm: { background: "#f8f9fa", padding: "8px 12px", borderRadius: 6, margin: "8px 0", borderLeft: "3px solid #0f3460", overflowX: "auto" },
-    sp: { background: "#fafbfc", padding: "10px 12px", borderRadius: 6, marginBottom: 7, borderLeft: "4px solid #e94560" },
-    spT: { fontWeight: 700, color: "#e94560", fontSize: 12, marginBottom: 3 },
-    ok: { background: "#e8f5e9", padding: "10px 12px", borderRadius: 6, fontWeight: 600, color: "#2e7d32", marginTop: 8, fontSize: 13 },
-    wn: { background: "#fff3e0", padding: "10px 12px", borderRadius: 6, color: "#e65100", marginTop: 8 },
-    q: { background: "#e3f2fd", padding: "8px 12px", borderRadius: 6, fontWeight: 600, color: "#0d47a1", marginBottom: 8, borderLeft: "4px solid #1976d2", fontSize: 13 },
-    ed: { background: "#fffbeb", border: "1px solid #f59e0b", borderRadius: 8, padding: 12, marginBottom: 10 },
-    edH: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-    btn: (bg) => ({ padding: "5px 12px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 600, background: bg, color: "#fff" }),
-    sel: { padding: "4px 6px", border: "1px solid #cbd5e1", borderRadius: 4, fontSize: 12, background: "#fffbeb" },
-    fab: { position: "fixed", bottom: 18, right: 18, display: "flex", gap: 6, zIndex: 999 },
-    fabBtn: (bg) => ({ padding: "7px 12px", borderRadius: 18, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, boxShadow: "0 2px 8px rgba(0,0,0,0.2)", background: bg, color: "#fff" }),
-  };
 
   if (!kr) return <div style={{ textAlign: "center", padding: 40 }}>Cargando LaTeX...</div>;
-
-  // ===== EDITORS =====
-  const Ed1 = () => (<div style={S.ed}>
-    <div style={S.edH}><b style={{ color: "#92400e", fontSize: 13 }}>Editar Parámetros — Parte I</b><button style={S.btn("#dc2626")} onClick={reset1}>Restablecer</button></div>
-    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-      <label style={{ fontSize: 12 }}><Tx m="\sigma" /> = <NI value={sig} onChange={setSig} w={55} /></label>
-      <label style={{ fontSize: 12 }}><Tx m="\alpha" /> = <select style={S.sel} value={a1} onChange={e => setA1(parseFloat(e.target.value))}>{ALPHAS.map(a => <option key={a} value={a}>{a}</option>)}</select></label>
-    </div>
-    <table style={S.T}><thead><tr><th style={S.th}>Arquitectura</th>{[1, 2, 3, 4].map(j => <th key={j} style={S.th}>Rep {j}</th>)}</tr></thead>
-      <tbody>{d1.map((row, i) => <tr key={i}><td style={{ ...S.td, fontWeight: 600 }}>{arqN[i]}</td>{row.map((v, j) => <td key={j} style={S.td}><NI value={v} onChange={x => updD1(i, j, x)} w={52} /></td>)}</tr>)}</tbody></table>
-  </div>);
-
-  const Ed2 = () => (<div style={S.ed}>
-    <div style={S.edH}><b style={{ color: "#92400e", fontSize: 13 }}>Editar Parámetros — Parte II</b><button style={S.btn("#dc2626")} onClick={reset2}>Restablecer</button></div>
-    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-      <label style={{ fontSize: 12 }}><Tx m="\alpha" /> = <select style={S.sel} value={a2} onChange={e => setA2(parseFloat(e.target.value))}>{ALPHAS.map(a => <option key={a} value={a}>{a}</option>)}</select></label>
-      <span style={{ fontSize: 12 }}>Predicción:</span>
-      {xp.map((v, i) => <label key={i} style={{ fontSize: 12 }}><Tx m={`x_${i + 1}`} />=<NI value={v} onChange={x => updXp(i, x)} w={48} /></label>)}
-    </div>
-    <div style={{ maxHeight: 220, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 4 }}>
-      <table style={{ ...S.T, marginTop: 0 }}><thead style={{ position: "sticky", top: 0 }}><tr><th style={S.th}>#</th><th style={S.th}>y</th><th style={S.th}><Tx m="x_1" /></th><th style={S.th}><Tx m="x_2" /></th><th style={S.th}><Tx m="x_3" /></th><th style={S.th}><Tx m="x_4" /></th></tr></thead>
-        <tbody>{d2.map((row, i) => <tr key={i}><td style={{ ...S.td, fontWeight: 600, fontSize: 10 }}>{i + 1}</td>{row.map((v, j) => <td key={j} style={S.td}><NI value={v} onChange={x => updD2(i, j, x)} w={46} /></td>)}</tr>)}</tbody></table>
-    </div>
-  </div>);
 
   // ===== PART 1 PANELS =====
   const P1 = [
@@ -271,8 +317,8 @@ export default function App() {
           <TB m={`\\hat{\\mu} = \\bar{y}_{..} = \\frac{\\sum y_{ij}}{N} = \\frac{${ff(p1.gm * p1.N, 2)}}{${p1.N}} = ${ff(p1.gm, 4)}\\text{ seg}`} />
           <TB m={`\\sigma^2 = (${ff(sig, 2)})^2 = ${ff(sig * sig, 4)}\\text{ seg}^2,\\quad \\sigma = ${ff(sig, 2)}\\text{ seg}`} />
         </div>
-        <div style={{...S.fm, marginTop: 4, padding: "6px 12px", background:"#f5f7fa"}}>
-           <Tx m={`\\text{Ejemplo } \\hat{\\tau}_1: \\bar{y}_1 - \\hat{\\mu} = ${ff(p1.mn[0], 4)} - ${ff(p1.gm, 4)} = ${ff(p1.tau[0], 4)}\\text{ seg}`} />
+        <div style={{ ...S.fm, marginTop: 4, padding: "6px 12px", background: "#f5f7fa" }}>
+          <Tx m={`\\text{Ejemplo } \\hat{\\tau}_1: \\bar{y}_1 - \\hat{\\mu} = ${ff(p1.mn[0], 4)} - ${ff(p1.gm, 4)} = ${ff(p1.tau[0], 4)}\\text{ seg}`} />
         </div>
         <div style={S.ok}><b>Respuesta:</b> La latencia promedio global del core bancario es <Tx m={`\\hat{\\mu}=${ff(p1.gm, 4)}`} /> seg. SwiftPay presenta el mayor efecto de reducción (<Tx m={`\\hat{\\tau}_3=${ff(p1.tau[2], 4)}`} />), mientras SwiftVen es la de mayor latencia (<Tx m={`\\hat{\\tau}_1=${p1.tau[0] > 0 ? "+" : ""}{${ff(p1.tau[0], 4)}}`} />).</div>
       </div>
@@ -322,10 +368,10 @@ export default function App() {
           </Def>
           <h4 style={{ margin: "6px 0 3px", color: "#333", fontSize: 13 }}>Sustitución de Fórmulas</h4>
           <div style={S.fm}>
-            <TB m={`SST = 4\\big[(${ff(p1.mn[0],4)}-${ff(p1.gm,4)})^2 + (${ff(p1.mn[1],4)}-${ff(p1.gm,4)})^2 + (${ff(p1.mn[2],4)}-${ff(p1.gm,4)})^2\\big] = ${ff(p1.SST, 6)}`} />
-            <TB m={`SSE = (${ff(p1.data[0][0],2)}-${ff(p1.mn[0],4)})^2 + \\cdots + (${ff(p1.data[2][3],2)}-${ff(p1.mn[2],4)})^2 = ${ff(p1.SSE, 6)}`} />
-            <TB m={`MST = \\frac{${ff(p1.SST,6)}}{2} = ${ff(p1.MST, 6)}, \\quad MSE = \\frac{${ff(p1.SSE,6)}}{9} = ${ff(p1.MSE, 6)}`} />
-            <TB m={`F_0 = \\frac{${ff(p1.MST,6)}}{${ff(p1.MSE,6)}} = ${f2(p1.F0)}`} />
+            <TB m={`SST = 4\\big[(${ff(p1.mn[0], 4)}-${ff(p1.gm, 4)})^2 + (${ff(p1.mn[1], 4)}-${ff(p1.gm, 4)})^2 + (${ff(p1.mn[2], 4)}-${ff(p1.gm, 4)})^2\\big] = ${ff(p1.SST, 6)}`} />
+            <TB m={`SSE = (${ff(p1.data[0][0], 2)}-${ff(p1.mn[0], 4)})^2 + \\cdots + (${ff(p1.data[2][3], 2)}-${ff(p1.mn[2], 4)})^2 = ${ff(p1.SSE, 6)}`} />
+            <TB m={`MST = \\frac{${ff(p1.SST, 6)}}{2} = ${ff(p1.MST, 6)}, \\quad MSE = \\frac{${ff(p1.SSE, 6)}}{9} = ${ff(p1.MSE, 6)}`} />
+            <TB m={`F_0 = \\frac{${ff(p1.MST, 6)}}{${ff(p1.MSE, 6)}} = ${f2(p1.F0)}`} />
           </div>
           <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Tabla ANOVA</h4>
           <table style={S.T}><thead><tr><th style={S.th}>Fuente</th><th style={S.th}>SS</th><th style={S.th}>gl</th><th style={S.th}>MS</th><th style={S.th}><Tx m="F_0" /></th><th style={S.th}><Tx m="F_{\text{crit}}" /></th><th style={S.th}>Valor-p</th></tr></thead>
@@ -359,8 +405,8 @@ export default function App() {
         </Def>
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Cálculo de diferencias absolutas y Resultados</h4>
         <div style={{ maxHeight: 150, overflowY: "auto", overflowX: "hidden" }}>
-        <table style={S.T}><thead><tr><th style={S.th}>Comparación</th><th style={S.th}><Tx m={"|\\bar{y}_i-\\bar{y}_j|"} /> Sustitución</th><th style={S.th}>Módulo</th><th style={S.th}>LSD</th><th style={S.th}>Resultado</th></tr></thead>
-          <tbody>{p1.cmp.map((x, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}>{x.a} vs {x.b}</td><td style={S.td}><Tx m={`|${ff(p1.mn[x.i-1], 4)} - ${ff(p1.mn[x.j-1], 4)}|`} /></td><td style={{...S.td, fontWeight: 600}}>{ff(x.diff, 4)}</td><td style={S.td}>{ff(p1.LSD, 4)}</td><td style={{ ...S.td, fontWeight: 700, color: x.sig ? "#2e7d32" : "#c62828" }}>{x.sig ? "Significativa" : "No significat."}</td></tr>)}</tbody></table>
+          <table style={S.T}><thead><tr><th style={S.th}>Comparación</th><th style={S.th}><Tx m={"|\\bar{y}_i-\\bar{y}_j|"} /> Sustitución</th><th style={S.th}>Módulo</th><th style={S.th}>LSD</th><th style={S.th}>Resultado</th></tr></thead>
+            <tbody>{p1.cmp.map((x, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}>{x.a} vs {x.b}</td><td style={S.td}><Tx m={`|${ff(p1.mn[x.i - 1], 4)} - ${ff(p1.mn[x.j - 1], 4)}|`} /></td><td style={{ ...S.td, fontWeight: 600 }}>{ff(x.diff, 4)}</td><td style={S.td}>{ff(p1.LSD, 4)}</td><td style={{ ...S.td, fontWeight: 700, color: x.sig ? "#2e7d32" : "#c62828" }}>{x.sig ? "Significativa" : "No significat."}</td></tr>)}</tbody></table>
         </div>
         <div style={S.ok}>{p1.cmp[2]?.sig && !p1.cmp[1]?.sig
           ? <><b>Respuesta:</b> SwiftPay (<Tx m="A_3" />) tiene la menor latencia ({ff(p1.mn[2], 4)} seg) y difiere de SwiftVen, pero <b>NO difiere significativamente de SwiftFast</b>. No se puede recomendar como estándar único; se sugiere evaluar costo, estabilidad y escalabilidad entre SwiftFast y SwiftPay.</>
@@ -384,31 +430,33 @@ export default function App() {
         <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>1. Residuos agrupados por Arquitectura</h4>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
           {p1.nm.map((name, i) => (
-             <div key={i} style={{ flex: 1, minWidth: "200px", background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "6px", padding: "8px" }}>
-                <div style={{ fontWeight: 600, color: "#0f3460", marginBottom: "4px", fontSize: "12px", borderBottom: "1px solid #ccc" }}>{name}</div>
-                {p1.data[i].map((v, j) => (
-                  <div key={j} style={{ fontSize: "12px", display: "flex", justifyContent: "space-between" }}>
-                    <span><Tx m={`e_{${i+1}${j+1}}`} /> {`= ${ff(v, 2)} - ${ff(p1.mn[i], 4)} = `}</span>
-                    <span style={{ fontWeight: 600, color: (v - p1.mn[i]) >= 0 ? "#2e7d32" : "#c62828" }}>{ff(v - p1.mn[i], 4)}</span>
-                  </div>
-                ))}
-             </div>
+            <div key={i} style={{ flex: 1, minWidth: "200px", background: "#f8f9fa", border: "1px solid #ddd", borderRadius: "6px", padding: "8px" }}>
+              <div style={{ fontWeight: 600, color: "#0f3460", marginBottom: "4px", fontSize: "12px", borderBottom: "1px solid #ccc" }}>{name}</div>
+              {p1.data[i].map((v, j) => (
+                <div key={j} style={{ fontSize: "12px", display: "flex", justifyContent: "space-between" }}>
+                  <span><Tx m={`e_{${i + 1}${j + 1}}`} /> {`= ${ff(v, 2)} - ${ff(p1.mn[i], 4)} = `}</span>
+                  <span style={{ fontWeight: 600, color: (v - p1.mn[i]) >= 0 ? "#2e7d32" : "#c62828" }}>{ff(v - p1.mn[i], 4)}</span>
+                </div>
+              ))}
+            </div>
           ))}
         </div>
         <Def show={D}><b><Tx m="e_{ij}" /> (Vector de Residuales Brutos):</b> En validación paramétrica sistemática, un residuo va mucho más allá de una simple resta; es el material estocástico putativo puro, nuestra ventana observacional ineludible para juzgar y caracterizar al latente error teórico fundamental <Tx m="\varepsilon_{ij}" />.</Def>
         <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>2. Cálculo del estadístico b (residuos ordenados)</h4>
         <table style={S.T}><thead><tr><th style={S.th}>i</th><th style={S.th}><Tx m="a_i" /></th><th style={S.th}><Tx m="x_{(n-i+1)}" /></th><th style={S.th}><Tx m="x_{(i)}" /></th><th style={S.th}><Tx m="x_{(n-i+1)} - x_{(i)}" /></th><th style={S.th}>Producto</th></tr></thead>
           <tbody>{p1.sw_steps.map((s, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}>
-            <td style={S.td}>{s.i}</td><td style={S.td}>{ff(s.a, 4)}</td><td style={S.td}>{ff(s.xn, 4)}</td><td style={S.td}>{ff(s.x1, 4)}</td><td style={S.td}>{ff(s.diff, 4)}</td><td style={{...S.td, fontWeight: 600}}>{ff(s.prod, 4)}</td>
+            <td style={S.td}>{s.i}</td><td style={S.td}>{ff(s.a, 4)}</td><td style={S.td}>{ff(s.xn, 4)}</td><td style={S.td}>{ff(s.x1, 4)}</td><td style={S.td}>{ff(s.diff, 4)}</td><td style={{ ...S.td, fontWeight: 600 }}>{ff(s.prod, 4)}</td>
           </tr>)}
-          <tr><td colSpan={5} style={{...S.td, textAlign: "right", fontWeight: 700}}>Suma (b) =</td><td style={{...S.td, fontWeight: 700, color: "#c62828"}}>{ff(p1.b_SW, 4)}</td></tr>
+            <tr><td colSpan={5} style={{ ...S.td, textAlign: "right", fontWeight: 700 }}>Suma (b) =</td><td style={{ ...S.td, fontWeight: 700, color: "#c62828" }}>{ff(p1.b_SW, 4)}</td></tr>
+            <tr><td colSpan={5} style={{ ...S.td, textAlign: "right", fontWeight: 700 }}>Valor-P =</td><td style={{ ...S.td, fontWeight: 700, color: "#1e3a8a" }}>{ff(p1.pval_SW, 4)}</td></tr>
           </tbody></table>
         <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>3. Prueba de Hipótesis y Resultado</h4>
         <div style={S.fm}>
-          <TB m={`W_{\\text{cal}} = \\frac{(${ff(p1.b_SW, 4)})^2}{${ff(p1.SSE, 4)}} = \\frac{${ff(p1.b_SW**2, 4)}}{${ff(p1.SSE, 4)}} = ${ff(p1.W_calc, 4)}`} />
+          <TB m={`W_{\\text{cal}} = \\frac{(${ff(p1.b_SW, 4)})^2}{${ff(p1.SSE, 4)}} = \\frac{${ff(p1.b_SW ** 2, 4)}}{${ff(p1.SSE, 4)}} = ${ff(p1.W_calc, 4)}`} />
           <TB m={`W_{\\text{crit}} (\\alpha=0.05, n=12) = 0.859`} />
+          <TB m={`p{\\text{-value}} = ${ff(p1.pval_SW, 4)}`} />
         </div>
-        <div style={p1.W_calc >= 0.859 ? S.ok : S.wn}><b>Respuesta:</b> Dado que <Tx m={`W_{\\text{cal}} = ${ff(p1.W_calc, 4)}`} /> {p1.W_calc >= 0.859 ? ">=" : "<"} <Tx m={`W_{\\text{crit}} = 0.859`} />, <b>{p1.W_calc >= 0.859 ? "no se rechaza" : "se rechaza"} la normalidad</b>. {p1.W_calc >= 0.859 ? "A un nivel de confianza del 95%, el supuesto de normalidad se sostiene sobre los residuos analizados." : "Hay evidencia estadística de que los errores no provienen de una distribución normal."}</div>
+        <div style={p1.W_calc >= 0.859 ? S.ok : S.wn}><b>Respuesta:</b> Dado que <Tx m={`W_{\\text{cal}} = ${ff(p1.W_calc, 4)}`} /> {p1.W_calc >= 0.859 ? "\\ge" : "<"} <Tx m={`W_{\\text{crit}} = 0.859`} /> (Valor-P = <Tx m={ff(p1.pval_SW, 4)} />), <b>{p1.W_calc >= 0.859 ? "no se rechaza" : "se rechaza"} la normalidad</b>. {p1.W_calc >= 0.859 ? "A un nivel de confianza del 95%, el supuesto de normalidad se sostiene sobre los residuos analizados." : "Hay evidencia estadística de que los errores no provienen de una distribución normal."}</div>
       </div>
     </div>),
 
@@ -443,8 +491,8 @@ export default function App() {
 
         <div style={S.cd}>
           <h4 style={{ margin: "0 0 6px", color: "#0f3460", fontSize: 13 }}>3. Cálculo del estadístico Z (Sustitución)</h4>
-          <div style={S.fm}><TB m={`E(R) = \\frac{2n_1 n_2}{N} + 1 = \\frac{2(${p1.n1})(${p1.n2})}{${p1.N}} + 1 = \\frac{${2*p1.n1*p1.n2}}{${p1.N}} + 1 = ${ff(p1.ER, 4)}`} /></div>
-          <div style={S.fm}><TB m={`\\sigma_R = \\sqrt{\\frac{2(${p1.n1})(${p1.n2})\\big[2(${p1.n1})(${p1.n2}) - ${p1.N}\\big]}{${p1.N}^2(${p1.N}-1)}} = \\sqrt{\\frac{${2*p1.n1*p1.n2}[${2*p1.n1*p1.n2} - ${p1.N}]}{${p1.N*p1.N}(${p1.N-1})}} = ${ff(p1.sdR, 4)}`} /></div>
+          <div style={S.fm}><TB m={`E(R) = \\frac{2n_1 n_2}{N} + 1 = \\frac{2(${p1.n1})(${p1.n2})}{${p1.N}} + 1 = \\frac{${2 * p1.n1 * p1.n2}}{${p1.N}} + 1 = ${ff(p1.ER, 4)}`} /></div>
+          <div style={S.fm}><TB m={`\\sigma_R = \\sqrt{\\frac{2(${p1.n1})(${p1.n2})\\big[2(${p1.n1})(${p1.n2}) - ${p1.N}\\big]}{${p1.N}^2(${p1.N}-1)}} = \\sqrt{\\frac{${2 * p1.n1 * p1.n2}[${2 * p1.n1 * p1.n2} - ${p1.N}]}{${p1.N * p1.N}(${p1.N - 1})}} = ${ff(p1.sdR, 4)}`} /></div>
           <div style={{ ...S.fm, borderLeft: "3px solid #e94560" }}><TB m={`Z_0 = \\frac{R - E(R)}{\\sigma_R} = \\frac{${p1.runs} - ${ff(p1.ER, 4)}}{${ff(p1.sdR, 4)}} = \\frac{${ff(p1.runs - p1.ER, 4)}}{${ff(p1.sdR, 4)}} = ${ff(p1.Z0runs, 4)}`} /></div>
         </div>
 
@@ -467,7 +515,7 @@ export default function App() {
         <Def show={D}><b>Homocedasticidad (Isotropía de la Varianza):</b> Piedra angular en la formulación gaussiana-lineal que impone isovarianza estructural: <Tx m="\sigma_1^2 = \sigma_2^2 = \cdots = \sigma_k^2 = \sigma^2" />. Físicamente asume que el mecanismo generador de ruido opera a una misma temperatura (escala) indiferentemente del tratamiento. Su grave perturbación (heterocedasticidad) falsea la métrica combinada de <Tx m="MSE" /> distorsionando irremediablemente la confiabilidad de la frontera de decisión <Tx m="F" />.</Def>
         <div style={S.fm}>
           <TB m={`s_i^2 = \\frac{1}{n-1}\\sum_{j=1}^{n}(y_{ij}-\\bar{y}_i)^2`} />
-          <TB m={`s_1^2 = \\frac{(${ff(p1.data[0][0],2)}-${ff(p1.mn[0],4)})^2 + \\dots + (${ff(p1.data[0][3],2)}-${ff(p1.mn[0],4)})^2}{4-1} = ${ff(p1.vr[0], 6)}`} />
+          <TB m={`s_1^2 = \\frac{(${ff(p1.data[0][0], 2)}-${ff(p1.mn[0], 4)})^2 + \\dots + (${ff(p1.data[0][3], 2)}-${ff(p1.mn[0], 4)})^2}{4-1} = ${ff(p1.vr[0], 6)}`} />
         </div>
         <table style={S.T}><thead><tr><th style={S.th}>Arquitectura</th><th style={S.th}><Tx m="s_i^2" /></th><th style={S.th}><Tx m="s_i" /></th></tr></thead>
           <tbody>{p1.nm.map((nm, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}>{nm}</td><td style={S.td}>{ff(p1.vr[i], 6)}</td><td style={S.td}>{ff(Math.sqrt(p1.vr[i]), 4)}</td></tr>)}</tbody></table>
@@ -533,9 +581,9 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Predicción Puntual</h3>
         <div style={S.fm}><TB m={"\\hat{y}=\\hat{\\beta}_0+\\hat{\\beta}_1x_1+\\hat{\\beta}_2x_2+\\hat{\\beta}_3x_3+\\hat{\\beta}_4x_4"} /></div>
-        <div style={{...S.fm, overflowX: "unset"}}>
+        <div style={{ ...S.fm, overflowX: "unset" }}>
           <TB m={`\\hat{y}=${ff(p2.b[0], 4)} + (${ff(p2.b[1], 4)})(${xp[0]}) + (${ff(p2.b[2], 4)})(${xp[1]}) + (${ff(p2.b[3], 4)})(${xp[2]}) + (${ff(p2.b[4], 4)})(${xp[3]})`} />
-          <TB m={`\\hat{y}=${ff(p2.b[0], 4)} ${p2.b[1]*xp[0] > 0 ? "+" : ""} ${ff(p2.b[1]*xp[0], 4)} ${p2.b[2]*xp[1] > 0 ? "+" : ""} ${ff(p2.b[2]*xp[1], 4)} ${p2.b[3]*xp[2] > 0 ? "+" : ""} ${ff(p2.b[3]*xp[2], 4)} ${p2.b[4]*xp[3] > 0 ? "+" : ""} ${ff(p2.b[4]*xp[3], 4)}`} />
+          <TB m={`\\hat{y}=${ff(p2.b[0], 4)} ${p2.b[1] * xp[0] > 0 ? "+" : ""} ${ff(p2.b[1] * xp[0], 4)} ${p2.b[2] * xp[1] > 0 ? "+" : ""} ${ff(p2.b[2] * xp[1], 4)} ${p2.b[3] * xp[2] > 0 ? "+" : ""} ${ff(p2.b[3] * xp[2], 4)} ${p2.b[4] * xp[3] > 0 ? "+" : ""} ${ff(p2.b[4] * xp[3], 4)}`} />
         </div>
         <div style={S.ok}><TB m={`\\boxed{\\hat{y}=${ff(p2.ypr, 4)}\\%}`} /><br /><b>Respuesta:</b> Bajo las condiciones dadas, el modelo predice un uso de CPU del {ff(p2.ypr, 2)}% en los servidores de SwiftPay.</div>
       </div>
@@ -593,7 +641,7 @@ export default function App() {
         <h4 style={{ margin: "8px 0 3px", color: "#333", fontSize: 13 }}>Cálculo y Sustitución</h4>
         <div style={S.fm}>
           <TB m={`R^2 = \\frac{${ff(p2.SSR, 4)}}{${ff(p2.SST, 4)}} = ${ff(p2.R2, 4)}`} />
-          <TB m={`R^2_{\\text{adj}} = 1 - \\frac{(1-${ff(p2.R2, 4)})(${p2.no}-1)}{${p2.no}-${p2.p}-1} = 1 - \\frac{(${ff(1-p2.R2, 4)})(${p2.no-1})}{${p2.no-p2.p-1}} = ${ff(p2.R2a, 4)}`} />
+          <TB m={`R^2_{\\text{adj}} = 1 - \\frac{(1-${ff(p2.R2, 4)})(${p2.no}-1)}{${p2.no}-${p2.p}-1} = 1 - \\frac{(${ff(1 - p2.R2, 4)})(${p2.no - 1})}{${p2.no - p2.p - 1}} = ${ff(p2.R2a, 4)}`} />
         </div>
         <div style={S.ok}><b>Respuesta:</b> El modelo explica el <b>{ff(p2.R2 * 100, 2)}%</b> de la variabilidad del uso de CPU. <Tx m={`R^2_{\\text{adj}}=${ff(p2.R2a * 100, 2)}\\%`} />. El {ff((1 - p2.R2) * 100, 2)}% restante corresponde a factores no incluidos o variabilidad aleatoria.</div>
       </div>
@@ -622,7 +670,7 @@ export default function App() {
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 7: Cálculos con Sustitución</div>
           <table style={S.T}><thead><tr><th style={S.th}>Variable</th><th style={S.th}><Tx m={"t_0 = \\frac{\\hat{\\beta}_i}{SE}"} /></th><th style={S.th}><Tx m="t_0" /> res</th><th style={S.th}><Tx m={`|t_0|\\text{ vs }${p2.tc}`} /></th><th style={S.th}>Valor-p</th><th style={S.th}>Decisión</th></tr></thead>
-            <tbody>{bN.slice(1).map((nm, i) => { const ix = i + 1, sg = Math.abs(p2.tv[ix]) > p2.tc; return <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={nm} /> ({bD[ix]})</td><td style={S.td}><Tx m={`\\frac{${ff(p2.b[ix], 4)}}{${ff(p2.se[ix], 4)}}`} /></td><td style={{ ...S.td, fontWeight: 700 }}>{ff(p2.tv[ix], 4)}</td><td style={S.td}>{ff(Math.abs(p2.tv[ix]), 4)} {sg ? ">" : "≤"} {p2.tc}</td><td style={{...S.td, fontWeight: 700, color: p2.pvals[ix] < a2 ? "#2e7d32" : "#c62828"}}>{p2.pvals[ix] < 0.0001 ? "<0.0001" : ff(p2.pvals[ix], 4)}</td><td style={{ ...S.td, fontWeight: 700, color: sg ? "#2e7d32" : "#c62828" }}>{sg ? "Signif." : "No signif."}</td></tr>; })}</tbody></table>
+            <tbody>{bN.slice(1).map((nm, i) => { const ix = i + 1, sg = Math.abs(p2.tv[ix]) > p2.tc; return <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={nm} /> ({bD[ix]})</td><td style={S.td}><Tx m={`\\frac{${ff(p2.b[ix], 4)}}{${ff(p2.se[ix], 4)}}`} /></td><td style={{ ...S.td, fontWeight: 700 }}>{ff(p2.tv[ix], 4)}</td><td style={S.td}>{ff(Math.abs(p2.tv[ix]), 4)} {sg ? ">" : "≤"} {p2.tc}</td><td style={{ ...S.td, fontWeight: 700, color: p2.pvals[ix] < a2 ? "#2e7d32" : "#c62828" }}>{p2.pvals[ix] < 0.0001 ? "<0.0001" : ff(p2.pvals[ix], 4)}</td><td style={{ ...S.td, fontWeight: 700, color: sg ? "#2e7d32" : "#c62828" }}>{sg ? "Signif." : "No signif."}</td></tr>; })}</tbody></table>
         </div>
         <div style={S.sp}><div style={S.spT}>Paso 8: Conclusión</div>
           <div style={S.ok}><b>Respuesta:</b> Con <Tx m={`\\alpha=${a2}`} />, las variables significativas son: <b>{p2.sigVars.length > 0 ? p2.sigVars.map(i => bD[i]).join(", ") : "ninguna"}</b>. Las no significativas ({p2.nsVars.map(i => bD[i]).join(", ")}) podrían eliminarse del modelo de telemetría de SwiftPay.</div>
@@ -636,7 +684,7 @@ export default function App() {
       <div style={S.cd}>
         <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Modelo Recomendado</h3>
         <table style={S.T}><thead><tr><th style={S.th}>Variable</th><th style={S.th}><Tx m="|t_0|" /></th><th style={S.th}>vs <Tx m={`${p2.tc}`} /></th><th style={S.th}>Valor-p</th><th style={S.th}>Decisión</th></tr></thead>
-          <tbody>{[1, 2, 3, 4].map(i => { const sg = Math.abs(p2.tv[i]) > p2.tc; return <tr key={i} style={{ background: i % 2 ? "" : "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={`x_${i}`} /> ({bD[i]})</td><td style={S.td}>{ff(Math.abs(p2.tv[i]), 4)}</td><td style={S.td}>{sg ? ">" : "≤"} {p2.tc}</td><td style={{...S.td, fontWeight: 700, color: p2.pvals[i] < a2 ? "#2e7d32" : "#c62828"}}>{p2.pvals[i] < 0.0001 ? "<0.0001" : ff(p2.pvals[i], 4)}</td><td style={{ ...S.td, fontWeight: 700, color: sg ? "#2e7d32" : "#c62828" }}>{sg ? "Incluir" : "Eliminar"}</td></tr>; })}</tbody></table>
+          <tbody>{[1, 2, 3, 4].map(i => { const sg = Math.abs(p2.tv[i]) > p2.tc; return <tr key={i} style={{ background: i % 2 ? "" : "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600 }}><Tx m={`x_${i}`} /> ({bD[i]})</td><td style={S.td}>{ff(Math.abs(p2.tv[i]), 4)}</td><td style={S.td}>{sg ? ">" : "≤"} {p2.tc}</td><td style={{ ...S.td, fontWeight: 700, color: p2.pvals[i] < a2 ? "#2e7d32" : "#c62828" }}>{p2.pvals[i] < 0.0001 ? "<0.0001" : ff(p2.pvals[i], 4)}</td><td style={{ ...S.td, fontWeight: 700, color: sg ? "#2e7d32" : "#c62828" }}>{sg ? "Incluir" : "Eliminar"}</td></tr>; })}</tbody></table>
         <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Modelo reducido propuesto</h4>
         <div style={S.fm}><TB m={`\\hat{y}=\\beta_0${p2.sigVars.map(i => `+\\beta_${i}x_${i}`).join("")}`} /></div>
         <Def show={D}><b>Reducción Activa (Subset Backward Selection):</b> Metodología de mutilación paramétrica racional para converger a un modelo anidado óptimo. Exterminar coeficientes espurios condensa la matriz covarianza <Tx m={"[(X^\\top X)^{-1}]"} />, estrechando abismalmente los intervalos de confianza en los coeficientes élites que sobreviven.</Def>
@@ -656,9 +704,11 @@ export default function App() {
         <button style={S.mt(tab === "p2")} onClick={() => setTab("p2")}>PARTE II</button>
       </div>
       <div style={{ background: "#fff", border: "1px solid #ddd", borderTop: "none", borderRadius: "0 0 8px 8px", padding: 12 }}>
-        {edit && (tab === "p1" ? Ed1() : Ed2())}
-        {tab === "p1" && (<><div style={S.sb}>{t1.map((t, i) => <button key={i} style={S.st(s1 === i)} onClick={() => setS1(i)}>{t}</button>)}</div>{P1[s1]()}</>)}
-        {tab === "p2" && (<><div style={S.sb}>{t2.map((t, i) => <button key={i} style={S.st(s2 === i)} onClick={() => setS2(i)}>{t}</button>)}</div>{P2[s2]()}</>)}
+        {edit && tab === "p1" && <DataEditor1 initialD={d1} initialA={a1} initialSig={sig} onApply={handleApply1} onCancel={() => setEdit(false)} />}
+        {edit && tab === "p2" && <DataEditor2 initialD={d2} initialA={a2} initialXp={xp} onApply={handleApply2} onCancel={() => setEdit(false)} />}
+
+        {!edit && tab === "p1" && (<><div style={S.sb}>{t1.map((t, i) => <button key={i} style={S.st(s1 === i)} onClick={() => setS1(i)}>{t}</button>)}</div>{P1[s1]()}</>)}
+        {!edit && tab === "p2" && (<><div style={S.sb}>{t2.map((t, i) => <button key={i} style={S.st(s2 === i)} onClick={() => setS2(i)}>{t}</button>)}</div>{P2[s2]()}</>)}
       </div>
       <div style={{ textAlign: "center", padding: "10px 0", color: "#999", fontSize: 10 }}>Estadística Inferencial — FACYT 2026</div>
       <div style={S.fab}>
