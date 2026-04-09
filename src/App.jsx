@@ -76,7 +76,40 @@ function calc1(data, sigma, alpha) {
   const Zcrit = alpha === 0.01 ? 2.576 : alpha === 0.05 ? 1.96 : 1.645;
   const runsOk = Math.abs(Z0runs) <= Zcrit;
   const pval = fPValue(F0, k - 1, N - k);
-  return { data, nm, k, n, N, sigma, alpha, mn, gm, tau, SST, SSE, SSTot, MST, MSE, F0, Fc, tc, LSD, cmp, vr, res, resSorted, runs, n1, n2, ER, VR, sdR, Z0runs, Zcrit, runsOk, rejected: F0 > Fc, pval, a_SW, b_SW, sw_steps, W_calc, pval_SW };
+
+  // Kruskal-Wallis Test
+  const kw_data = [];
+  data.forEach((g, i) => g.forEach(v => kw_data.push({ v, g: i, nm: nm[i] })));
+  kw_data.sort((a, b) => a.v - b.v);
+
+  let kw_ties = [];
+  let kw_idx = 0;
+  while (kw_idx < kw_data.length) {
+    let kw_j = kw_idx;
+    while (kw_j < kw_data.length && kw_data[kw_j].v === kw_data[kw_idx].v) kw_j++;
+    const t_len = kw_j - kw_idx;
+    if (t_len > 1) kw_ties.push(t_len);
+    const avgR = kw_idx + 1 + (t_len - 1) / 2;
+    for (let k_i = kw_idx; k_i < kw_j; k_i++) kw_data[k_i].r = avgR;
+    kw_idx = kw_j;
+  }
+
+  const kw_R = new Array(k).fill(0);
+  kw_data.forEach(d => { kw_R[d.g] += d.r; });
+  let kw_sum_R2_n = 0;
+  for (let grp = 0; grp < k; grp++) kw_sum_R2_n += (kw_R[grp] ** 2) / data[grp].length;
+
+  const kw_H = (12 / (N * (N + 1))) * kw_sum_R2_n - 3 * (N + 1);
+  let kw_tieSum = 0;
+  kw_ties.forEach(t => { kw_tieSum += (Math.pow(t, 3) - t); });
+  const kw_tieCorrection = 1 - (kw_tieSum / (Math.pow(N, 3) - N));
+  const kw_H_adj = kw_tieSum > 0 ? kw_H / kw_tieCorrection : kw_H;
+
+  const chiSquareDf2 = { 0.01: 9.210, 0.05: 5.991, 0.10: 4.605 };
+  const kw_chiCrit = chiSquareDf2[alpha] || 5.991;
+  const kw_rejected = kw_H_adj > kw_chiCrit;
+
+  return { data, nm, k, n, N, sigma, alpha, mn, gm, tau, SST, SSE, SSTot, MST, MSE, F0, Fc, tc, LSD, cmp, vr, res, resSorted, runs, n1, n2, ER, VR, sdR, Z0runs, Zcrit, runsOk, rejected: F0 > Fc, pval, a_SW, b_SW, sw_steps, W_calc, pval_SW, kw_data, kw_ties, kw_R, kw_H, kw_tieSum, kw_tieCorrection, kw_H_adj, kw_chiCrit, kw_rejected };
 }
 
 function calc2(raw, alpha, xp) {
@@ -155,7 +188,7 @@ function FisherChart({ d1, d2, F0, Fc, alpha }) {
   return <canvas ref={canvasRef} width={500} height={200} style={{ width: "100%", maxWidth: 500, height: "auto", border: "1px solid #e0e0e0", borderRadius: 6, background: "#fafbfc", marginTop: 8 }} />;
 }
 
-const t1 = ["1. Modelo", "2. ANOVA", "3. Comparaciones", "4. Normalidad", "5. Aleatoriedad", "6. Varianzas", "7. Supuestos"];
+const t1 = ["1. Modelo", "2. ANOVA", "3. Comparaciones", "4. Normalidad", "5. Aleatoriedad", "6. Varianzas", "7. Kruskal-Wallis"];
 const t2 = ["1. MCO", "2. Predicción", "3. ANOVA", "4. R\u00B2", "5. IC", "6. Signif.", "7. Modelo"];
 const bN = ["\\beta_0", "\\beta_1", "\\beta_2", "\\beta_3", "\\beta_4"];
 const bD = ["Intercepto", "Peticiones/s", "Tam. trama", "Lat. bóveda", "Mem. microserv."];
@@ -529,9 +562,9 @@ export default function App() {
             </div>
             <Def show={D}><b>Test F_max de Hartley:</b> Procedimiento analítico rigoroso para comprobar la homogeneidad al contrastar la razón de las variabilidades extremas empíricas (<Tx m="s^2_{\\max}/s^2_{\\min}" />) contra su respectivo cuantil en la distribución especial de Hartley. Dado que los conjuntos de datos del banco tienen exactamente el mismo tamaño (<Tx m="n=4" />, grados de libertad <Tx m="v=3" /> y <Tx m="k=3" /> arquitecturas), el rechazo formal de la simetría paramétrica ocurre explícitamente si y solo si <Tx m="F_{\\max} \\geq 15.44" />.</Def>
             <div style={rat < 15.44 ? S.ok : S.wn}>
-              <b>Respuesta Explícita:</b> La discrepancia extrema entre las varianzas genera un estadístico <Tx m={`F_{\\max} = ${ff(rat, 4)}`} />. 
-              {rat < 15.44 
-                ? ` Dado que ${ff(rat, 4)} es estrictamente inferior a 15.44 (el valor crítico F), NO se rechaza la hipótesis nula de homocedasticidad. En el contexto del banco, esto certifica explícitamente que las tres arquitecturas SÍ operan con exactamente el mismo margen paramétrico de volatilidad e inestabilidad algorítmica en sus latencias de respuesta hacia los clientes. ` 
+              <b>Respuesta Explícita:</b> La discrepancia extrema entre las varianzas genera un estadístico <Tx m={`F_{\\max} = ${ff(rat, 4)}`} />.
+              {rat < 15.44
+                ? ` Dado que ${ff(rat, 4)} es estrictamente inferior a 15.44 (el valor crítico F), NO se rechaza la hipótesis nula de homocedasticidad. En el contexto del banco, esto certifica explícitamente que las tres arquitecturas SÍ operan con exactamente el mismo margen paramétrico de volatilidad e inestabilidad algorítmica en sus latencias de respuesta hacia los clientes. `
                 : ` Dado que ${ff(rat, 4)} supera al crítico 15.44, SE RECHAZA la hipótesis nula de homogeneidad. En el ecosistema del banco, esto significa inequívocamente que una o más arquitecturas están induciendo picos de inestabilidad desproporcionados en las métricas de respuesta a los clientes. No obstante, dado que el banco planificó exactamente 4 simulaciones de estrés por diseño cerrado (n=4), el error algorítmico queda neutralizado y tu tabla ANOVA sobrevive asimptóticamente intacta.`
               }
             </div>
@@ -540,23 +573,76 @@ export default function App() {
       </div>
     </div>),
 
-    // Supuestos
+    // Kruskal-Wallis
     () => (<div>
-      <div style={S.q}>Pregunta 7: Si no se cumplen los supuestos, ¿se mantienen las conclusiones del inciso 2?</div>
+      <div style={S.q}>Pregunta 7: Y si no se cumplen los supuestos ¿Mantiene las conclusiones dadas en el inciso 2?</div>
       <div style={S.cd}>
-        <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Robustez de las Conclusiones</h3>
-        <Def show={D}><b>Robustez del Operador ANOVA:</b> Capacidad de resistencia homeostática del algoritmo frente al deterioro topológico de sus prerrequisitos de Gauss-Markov. El diseño balanceado estabiliza matricialmente las derivadas del vector de varianzas y neutraliza la kurtosis y sesgos estocásticos débiles a nivel de covarianza, preservando la tasa <Tx m="\alpha" /> inmersa. La rigidez paramétrica de Fisher-Snedecor suele auto-preservarse asombrosamente bien a menos que ocurran colapsos simultáneos y masivos (e.g. log-normalidad aliada con severa anisotropía).</Def>
-        <table style={S.T}><thead><tr><th style={S.th}>Supuesto</th><th style={S.th}>Estado</th><th style={S.th}>Impacto</th></tr></thead>
+        <h3 style={{ color: "#0f3460", marginTop: 0, fontSize: 15 }}>Kruskal-Wallis — Justificación Robusta</h3>
+        <Def show={D}><b>Test de Kruskal-Wallis:</b> Cuando los supuestos de normalidad o, de forma muy crítica, el de homocedasticidad para ANOVA se ven gravemente vulnerados (como nuestro <Tx m="F_{\max}" /> lo sugiere), no podemos basar la inferencia plenamente en medias muestrales. Kruskal-Wallis esquiva el error mapeando los datos continuos al dominio discreto de los rangos (posiciones ordinales). Evalúa estadísticamente si los rangos medios difieren, identificando si una procedencia poblacional domina estocásticamente a otra sin asumir varianzas iguales ni normalidad estricta.</Def>
+
+        <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Paso 1: Asignación de Rangos</h4>
+        <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid #ddd", borderRadius: 6, marginBottom: 12 }}>
+          <table style={{ ...S.T, marginTop: 0 }}>
+            <thead style={{ position: "sticky", top: 0, zIndex: 1 }}><tr><th style={S.th}>Observación (<Tx m="y" />)</th><th style={S.th}>Arquitectura</th><th style={S.th}>Rango (<Tx m="r" />)</th></tr></thead>
+            <tbody>
+              {p1.kw_data.map((d, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}>
+                <td style={S.td}>{ff(d.v, 2)}</td><td style={S.td}>{d.nm}</td><td style={{ ...S.td, fontWeight: 600 }}>{ff(d.r, 1)}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+
+        <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Paso 2: Suma de Rangos por Grupo</h4>
+        <div style={S.fm}>
+          <TB m={`R_i = \\sum r_{ij}`} />
+        </div>
+        <table style={S.T}>
+          <thead><tr><th style={S.th}>Arquitectura</th><th style={S.th}><Tx m="n_i" /></th><th style={S.th}>Suma de Rangos (<Tx m="R_i" />)</th><th style={S.th}><Tx m="R_i^2 / n_i" /></th></tr></thead>
           <tbody>
-            <tr><td style={{ ...S.td, fontWeight: 600 }}>Normalidad</td><td style={{ ...S.td, color: "#2e7d32", fontWeight: 600 }}>Razonable</td><td style={{ ...S.td, textAlign: "left" }}>Sin evidencia en contra</td></tr>
-            <tr style={{ background: "#f9f9f9" }}><td style={{ ...S.td, fontWeight: 600 }}>Aleatoriedad</td><td style={{ ...S.td, color: "#2e7d32", fontWeight: 600 }}>Razonable</td><td style={{ ...S.td, textAlign: "left" }}>Depende del diseño experimental</td></tr>
-            <tr><td style={{ ...S.td, fontWeight: 600 }}>Homocedasticidad</td><td style={{ ...S.td, color: "#e65100", fontWeight: 600 }}>Cuestionable</td><td style={{ ...S.td, textAlign: "left" }}>Razón = {ff(Math.max(...p1.vr) / Math.min(...p1.vr), 2)}</td></tr>
-          </tbody></table>
-        <p style={{ fontSize: 13, marginTop: 8 }}>1. <b>Diseño balanceado</b> (<Tx m="n_1=n_2=n_3=4" />) → ANOVA robusto.</p>
-        <p style={{ fontSize: 13 }}>2. <b><Tx m="F_0" /> holgado:</b> <Tx m={`${f2(p1.F0)}/${p1.Fc} \\approx ${ff(p1.F0 / p1.Fc, 1)}`} /> veces el valor crítico.</p>
-        <p style={{ fontSize: 13 }}>3. <b>Normalidad</b> no rechazada por inspección de residuos.</p>
-        <Def show={D}><b>Inferencia en Régimen de Señal Ultra-Dominante:</b> Cuando la métrica de contraste satisface <Tx m={"F_0 \\gg F_c"} />, la función de verosimilitud de <Tx m="H_1" /> se impone verticalmente superponiendo cualquier sombra arrojada por imperfecciones en supuestos menores. El choque estadístico resulta tan asimétricamente violento que incluso calibrando la frontera con correcciones pesadas no-paramétricas jamás re-atravesaría de vuelta a la zona de nulidad iterativa.</Def>
-        <div style={S.ok}><b>Respuesta:</b> Aun si los supuestos no se cumplen estrictamente, <b>las conclusiones se mantienen</b>. El diseño balanceado y <Tx m={`F_0=${f2(p1.F0)}`} /> (ampliamente superior a {p1.Fc}) otorgan robustez. Se recomienda más réplicas para confirmar con mayor rigor.</div>
+            {p1.nm.map((nm, i) => <tr key={i} style={{ background: i % 2 ? "#f9f9f9" : "#fff" }}>
+              <td style={{ ...S.td, fontWeight: 600 }}>{nm}</td>
+              <td style={S.td}>{p1.n}</td>
+              <td style={{ ...S.td, fontWeight: 700 }}>{ff(p1.kw_R[i], 1)}</td>
+              <td style={S.td}>{ff(Math.pow(p1.kw_R[i], 2) / p1.n, 3)}</td>
+            </tr>)}
+            <tr>
+              <td colSpan={3} style={{ ...S.td, textAlign: "right", fontWeight: 700 }}>Sumatoria =</td>
+              <td style={{ ...S.td, fontWeight: 700, color: "#c62828" }}>{ff(p1.kw_R.reduce((a, r) => a + Math.pow(r, 2) / p1.n, 0), 3)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Paso 3: Cálculo del Estadístico H</h4>
+        <div style={S.fm}>
+          <TB m={`H = \\frac{12}{N(N+1)} \\sum_{i=1}^k \\frac{R_i^2}{n_i} - 3(N+1)`} />
+          <TB m={`H = \\frac{12}{${p1.N}(${p1.N + 1})} (${ff(p1.kw_R.reduce((a, r) => a + Math.pow(r, 2) / p1.n, 0), 3)}) - 3(${p1.N + 1}) = ${ff(p1.kw_H, 4)}`} />
+        </div>
+
+        {p1.kw_ties.length > 0 && (
+          <>
+            <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Paso 4: Corrección por Empates</h4>
+            <Def show={D}><b>Factor de Corrección (<Tx m="C" />):</b> Cuando existen empates (valores iguales), se promedian sus rangos. Esto artificialmente comprime la varianza ordinal total y subestima <Tx m="H" />. Se aplica la corrección penalizadora <Tx m={"C"} /> empleando el número de empates <Tx m="t" /> obtenidos iterativamente; luego se proyecta <Tx m="H_{adj} = H / C" /> recuperando el poder real de la prueba.</Def>
+            <div style={S.fm}>
+              <TB m={`C = 1 - \\frac{\\sum (t^3 - t)}{N^3 - N} = 1 - \\frac{${p1.kw_tieSum}}{${Math.pow(p1.N, 3)} - ${p1.N}} = ${ff(p1.kw_tieCorrection, 6)}`} />
+              <TB m={`H_{adj} = \\frac{H}{C} = \\frac{${ff(p1.kw_H, 4)}}{${ff(p1.kw_tieCorrection, 6)}} = ${ff(p1.kw_H_adj, 4)}`} />
+            </div>
+          </>
+        )}
+
+        <h4 style={{ margin: "10px 0 3px", color: "#333", fontSize: 13 }}>Paso 5: Regla de Decisión y Conclusión</h4>
+        <div style={S.fm}>
+          <TB m={`\\text{Rechazar } H_0 \\text{ si } ${p1.kw_ties.length > 0 ? "H_{adj}" : "H"} > \\chi^2_{\\alpha, k-1}`} />
+          <TB m={`\\chi^2_{${p1.alpha}, ${p1.k - 1}} = ${ff(p1.kw_chiCrit, 3)}`} />
+        </div>
+
+        <div style={p1.kw_rejected ? S.ok : S.wn}>
+          <b>Respuesta:</b> Con un error del {p1.alpha * 100}% y <Tx m={`${p1.k - 1}`} /> grados de libertad, el estadístico superior de Kruskal-Wallis evalúa a {p1.kw_ties.length > 0 ? <Tx m={`H_{adj} = ${ff(p1.kw_H_adj, 4)}`} /> : <Tx m={`H = ${ff(p1.kw_H, 4)}`} />}, lo cual {p1.kw_rejected ? "supera con creces" : "no logra superar"} el límite crítico asintótico condicional de <Tx m={`\\chi^2 = ${ff(p1.kw_chiCrit, 3)}`} />.
+          <br /><br />
+          {p1.kw_rejected
+            ? <>Debido a esta evidencia empírica incontrovertible, <b>se rechaza <Tx m="H_0" /></b> y <b>concluimos inequívocamente que existen diferencias altamente significativas entre las arquitecturas bancarias empleando rangos globales puros</b>. Esta deducción ortogonal libre de distribución <b>confirma de manera robusta y definitiva la conclusión lograda en el tradicional ANOVA de varianzas (inciso 2)</b>, incluso frente al deterioro evidente de la regla de homocedasticidad entre los grupos analizados.</>
+            : <>Bajo estas restricciones empíricas, <b>no se rechaza <Tx m="H_0" /></b>. Por ende, desde la lente libre de distribución <b>sostenemos que no existe divergencia operativa significativa entre las arquitecturas</b>. Este nuevo enfoque contradice y absorbe el resultado previo paramétrico, protegiéndote contra falsos positivos motivados por violaciones de homocedasticidad en la matriz muestral.</>
+          }
+        </div>
       </div>
     </div>),
   ];
